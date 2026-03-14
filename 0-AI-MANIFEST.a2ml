@@ -54,7 +54,7 @@ Generated C headers in `generated/abi/`.
 1. **No SCM duplication** — Root must NOT contain STATE.scm, META.scm, etc.
 2. **Single source of truth** — `.machine_readable/` is authoritative
 3. **License** — All code PMPL-1.0-or-later
-4. **Author** — "Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>"
+4. **Author** — "Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>"
 5. **No unsafe Rust** without `// SAFETY:` comment referencing ABI proofs
 6. **No banned crates** — No C-based OCR (Tesseract), no openssl (use ring/rustls)
 7. **No banned patterns** — No believe_me, Admitted, assert_total, unsafePerformIO, transmute

@@ -371,3 +371,12 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
   This Source Code Form is "Incompatible With Secondary Licenses", as
   defined by the Mozilla Public License, v. 2.0.
+
+---
+
+NOTE: The author (Jonathan D.A. Jewell) also voluntarily adopts the
+Palimpsest-MPL License (PMPL-1.0-or-later), a philosophical extension of
+MPL-2.0 currently in development. PMPL adds provisions for post-quantum
+cryptographic provenance, ethical use, and AI-age protections. The legally
+binding license for this software remains MPL-2.0. For more information on
+PMPL, see: https://github.com/hyperpolymath/palimpsest-mpl

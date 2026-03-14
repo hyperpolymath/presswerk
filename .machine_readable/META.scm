@@ -4,7 +4,7 @@
     (type "mobile-app")
     (languages (rust idris2 zig))
     (license "PMPL-1.0-or-later")
-    (author "Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>")
+    (author "Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>")
     (framework "dioxus-0.7")
     (platforms (ios android desktop)))
   (architecture-decisions
