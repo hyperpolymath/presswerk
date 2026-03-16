@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Clade declaration — part of the gv-clade-index registry
+# See: https://github.com/hyperpolymath/gv-clade-index
+
+[identity]
+uuid = "307171ac-7835-5d99-aff3-f746a860a610"
+primary-forge = "github"
+primary-owner = "hyperpolymath"
+canonical-name = "presswerk"
+prefixed-name = "ap-presswerk"
+
+[clade]
+primary = "ap"
+secondary = []
+assigned = "2026-03-16"
+rationale = ""
+
+[forges]
+github = "hyperpolymath/presswerk"
+gitlab = "hyperpolymath/presswerk"
+bitbucket = "hyperpolymath/presswerk"
+
+[lineage]
+type = "standalone"
+parent = "Publishing/press tool"
+born = "2026-03-16"
