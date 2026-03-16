@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
+#![forbid(unsafe_code)]
 ||| presswerk-security — Cryptographic foundation for high-assurance printing.
 |||
 ||| This crate provides the secure storage and identity primitives required by 

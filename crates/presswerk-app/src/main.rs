@@ -8,6 +8,7 @@
 //   - Easy Mode (default): simplified 3-tap printing for non-technical users
 //   - Advanced Mode: full Presswerk interface with all features
 
+#![forbid(unsafe_code)]
 mod pages;
 mod services;
 mod state;

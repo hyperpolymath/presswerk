@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
+#![forbid(unsafe_code)]
 ||| presswerk-document — High-assurance document and image processing pipeline.
 |||
 ||| This crate implements the "Print Doctor" logic, responsible for transforming

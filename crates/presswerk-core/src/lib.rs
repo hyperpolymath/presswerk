@@ -3,6 +3,7 @@
 //
 // Presswerk — Core types and error definitions shared across all crates.
 
+#![forbid(unsafe_code)]
 pub mod config;
 pub mod error;
 pub mod human_errors;

@@ -5,6 +5,7 @@
 // job queue.  This crate bridges between the core domain types defined in
 // `presswerk-core` and the actual network printing infrastructure.
 
+#![forbid(unsafe_code)]
 pub mod capabilities;
 pub mod diagnostics;
 pub mod discovery;
