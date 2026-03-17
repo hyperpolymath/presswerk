@@ -1,3 +1,4 @@
+# RSR-compliant .gitignore
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Presswerk .gitignore
 
@@ -52,3 +53,49 @@ ai-cli-crash-capture/
 
 # Sync artifacts
 sync_report*.txt
+
+
+# Cargo.lock  # Keep for binaries
+
+
+# Elixir
+/cover/
+/doc/
+*.ez
+erl_crash.dump
+
+
+# Julia
+*.jl.cov
+*.jl.mem
+/Manifest.toml
+
+
+# ReScript
+/lib/bs/
+/.bsb.lock
+
+
+# Python (SaltStack only)
+__pycache__/
+*.py[cod]
+.venv/
+
+
+# Ada/SPARK
+*.ali
+/obj/
+/bin/
+
+
+# Haskell
+/.stack-work/
+/dist-newstyle/
+
+
+# Chapel
+*.chpl.tmp.*
+
+
+# Machine-readable locks
+.machine_readable/.locks/
