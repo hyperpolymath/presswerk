@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Presswerk — Stapeln/Selur service definition.
+#
+# High-assurance local print router/server with IPP/1.1, mDNS discovery,
+# document scanning, encrypted storage, and formal verification.
+#
+# Three build stages:
+#   1. presswerk-builder — Rust workspace (core, security, document, print)
+#   2. selur-builder     — Optional WASM bridge for vordr IPC
+#   3. runtime           — wolfi-base with binaries + selur bridge
+#
+# Ports:
+#   631  — IPP print server
+#   8000 — Svalinn HTTP gateway (policy enforcement)
+#
+# Usage:
+#   podman-compose -f selur-compose.toml up -d
+#   just stack-up
+
+[project]
+name = "presswerk"
+
+# =============================================================================
+# Presswerk — IPP print server
+# =============================================================================
+[services.app]
+build = { context = ".", dockerfile = "Containerfile" }
+restart = "unless-stopped"
+ports = ["631:631", "8000:8000"]
+networks = ["presswerk-internal"]
+environment = [
+  "PRESSWERK_PORT=631",
+  "PRESSWERK_DATA_DIR=/var/lib/presswerk",
+  "PRESSWERK_LOG_LEVEL=info",
+  "PRESSWERK_HEADLESS=true",
+  "SVALINN_PORT=8000",
+  "SVALINN_POLICY=/etc/presswerk/svalinn-policy.yaml",
+  "VORDR_ENDPOINT=selur://unix:///run/presswerk.sock",
+  "SELUR_WASM=/app/lib/presswerk-bridge.wasm",
+  "CT_TRUST_STORE=/etc/presswerk/trust-store",
+]
+volumes = [
+  "presswerk-data:/var/lib/presswerk",
+  "presswerk-config:/etc/presswerk",
+  "presswerk-cache:/var/cache/presswerk",
+]
+healthcheck = { test = "wget -q --spider http://localhost:631/ipp/print || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+
+# =============================================================================
+# Networks
+# =============================================================================
+[networks.presswerk-internal]
+driver = "bridge"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+[volumes.presswerk-data]
+driver = "local"
+
+[volumes.presswerk-config]
+driver = "local"
+
+[volumes.presswerk-cache]
+driver = "local"
+
+# =============================================================================
+# Svalinn policy enforcement (future — when Stapeln stack is ready)
+# =============================================================================
+# [x-svalinn]
+# policy = "svalinn-policy.yaml"
+# require-signed-images = true
+# require-sbom = true
