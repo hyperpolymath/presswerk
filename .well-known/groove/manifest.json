@@ -4,13 +4,13 @@
     "team"
   ],
   "capabilities": {
-    "primary": {
-      "description": "TODO: describe this service's primary capability",
+    "http": {
+      "description": "Mobile print server and document processing service with scanning, OCR, and format conversion.",
       "endpoint": "/api",
       "panel_compatible": true,
       "protocol": "http",
       "requires_auth": false,
-      "type": "custom"
+      "type": "http"
     }
   },
   "consumes": [],
