@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
 <!-- TOPOLOGY.md — Project architecture map and completion dashboard -->
-<!-- Last updated: 2026-02-19 -->
+<!-- Last updated: 2026-04-04 -->
 
 # Presswerk — Project Topology
 
@@ -46,6 +46,7 @@
                         │          REPO INFRASTRUCTURE            │
                         │  Justfile Automation  .machine_readable/  │
                         │  Cargo Workspace      0-AI-MANIFEST.a2ml  │
+                        │  Groove Protocol      .well-known/groove/ │
                         └─────────────────────────────────────────┘
 ```
 
