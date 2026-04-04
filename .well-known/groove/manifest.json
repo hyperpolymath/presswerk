@@ -1,0 +1,22 @@
+{
+  "applicability": [
+    "individual",
+    "team"
+  ],
+  "capabilities": {
+    "primary": {
+      "description": "TODO: describe this service's primary capability",
+      "endpoint": "/api",
+      "panel_compatible": true,
+      "protocol": "http",
+      "requires_auth": false,
+      "type": "custom"
+    }
+  },
+  "consumes": [],
+  "endpoints": {},
+  "groove_version": "1",
+  "health": "/health",
+  "service_id": "",
+  "service_version": "0.3.0"
+}
