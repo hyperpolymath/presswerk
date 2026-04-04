@@ -224,7 +224,7 @@ impl Default for PrintSettings {
 }
 
 /// Page range specification.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PageRange {
     pub start: u32,
     pub end: u32,
@@ -328,4 +328,183 @@ pub enum ServerStatus {
     Starting,
     Running,
     Error,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_job_id_unique() {
+        let id1 = JobId::new();
+        let id2 = JobId::new();
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_job_id_default() {
+        let id1 = JobId::default();
+        let id2 = JobId::default();
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_job_id_display() {
+        let id = JobId::new();
+        let display_str = id.to_string();
+        assert!(!display_str.is_empty());
+        assert_eq!(display_str.len(), 36); // UUID format
+    }
+
+    #[test]
+    fn test_document_type_mime_types() {
+        assert_eq!(DocumentType::Pdf.mime_type(), "application/pdf");
+        assert_eq!(DocumentType::Jpeg.mime_type(), "image/jpeg");
+        assert_eq!(DocumentType::Png.mime_type(), "image/png");
+        assert_eq!(DocumentType::Tiff.mime_type(), "image/tiff");
+        assert_eq!(DocumentType::PlainText.mime_type(), "text/plain");
+    }
+
+    #[test]
+    fn test_document_type_extensions() {
+        assert_eq!(DocumentType::from_extension("pdf"), Some(DocumentType::Pdf));
+        assert_eq!(DocumentType::from_extension("jpg"), Some(DocumentType::Jpeg));
+        assert_eq!(DocumentType::from_extension("jpeg"), Some(DocumentType::Jpeg));
+        assert_eq!(DocumentType::from_extension("png"), Some(DocumentType::Png));
+        assert_eq!(DocumentType::from_extension("txt"), Some(DocumentType::PlainText));
+        assert_eq!(DocumentType::from_extension("unknown"), None);
+    }
+
+    #[test]
+    fn test_document_type_case_insensitive() {
+        assert_eq!(DocumentType::from_extension("PDF"), Some(DocumentType::Pdf));
+        assert_eq!(DocumentType::from_extension("JPG"), Some(DocumentType::Jpeg));
+        assert_eq!(DocumentType::from_extension("Pdf"), Some(DocumentType::Pdf));
+    }
+
+    #[test]
+    fn test_paper_size_a4_dimensions() {
+        let (w, h) = PaperSize::A4.dimensions_mm();
+        assert_eq!(w, 210);
+        assert_eq!(h, 297);
+    }
+
+    #[test]
+    fn test_paper_size_custom_dimensions() {
+        let custom = PaperSize::Custom {
+            width_mm: 100,
+            height_mm: 150,
+        };
+        let (w, h) = custom.dimensions_mm();
+        assert_eq!(w, 100);
+        assert_eq!(h, 150);
+    }
+
+    #[test]
+    fn test_paper_size_ipp_keywords() {
+        assert_eq!(PaperSize::A4.ipp_media_keyword(), "iso_a4_210x297mm");
+        assert_eq!(PaperSize::Letter.ipp_media_keyword(), "na_letter_8.5x11in");
+        assert_eq!(PaperSize::Legal.ipp_media_keyword(), "na_legal_8.5x14in");
+    }
+
+    #[test]
+    fn test_duplex_mode_keywords() {
+        assert_eq!(DuplexMode::Simplex.ipp_sides_keyword(), "one-sided");
+        assert_eq!(DuplexMode::LongEdge.ipp_sides_keyword(), "two-sided-long-edge");
+        assert_eq!(DuplexMode::ShortEdge.ipp_sides_keyword(), "two-sided-short-edge");
+    }
+
+    #[test]
+    fn test_orientation_enum_values() {
+        assert_eq!(Orientation::Portrait.ipp_enum_value(), 3);
+        assert_eq!(Orientation::Landscape.ipp_enum_value(), 4);
+        assert_eq!(Orientation::ReversePortrait.ipp_enum_value(), 5);
+        assert_eq!(Orientation::ReverseLandscape.ipp_enum_value(), 6);
+    }
+
+    #[test]
+    fn test_print_settings_default() {
+        let settings = PrintSettings::default();
+        assert_eq!(settings.copies, 1);
+        assert_eq!(settings.paper_size, PaperSize::A4);
+        assert_eq!(settings.duplex, DuplexMode::Simplex);
+        assert!(settings.color);
+        assert!(settings.scale_to_fit);
+    }
+
+    #[test]
+    fn test_print_job_new() {
+        let job = PrintJob::new(
+            JobSource::Local,
+            DocumentType::Pdf,
+            "test.pdf".to_string(),
+            "hash123".to_string(),
+        );
+
+        assert_eq!(job.status, JobStatus::Pending);
+        assert_eq!(job.document_name, "test.pdf");
+        assert_eq!(job.document_hash, "hash123");
+        assert_eq!(job.retry_count, 0);
+        assert_eq!(job.max_retries, 5);
+        assert_eq!(job.bytes_sent, 0);
+        assert_eq!(job.total_bytes, 0);
+    }
+
+    #[test]
+    fn test_print_job_timestamps() {
+        let job = PrintJob::new(
+            JobSource::Local,
+            DocumentType::Pdf,
+            "test.pdf".to_string(),
+            "hash".to_string(),
+        );
+
+        let diff = job.updated_at.signed_duration_since(job.created_at);
+        assert!(diff.num_seconds() <= 1);
+    }
+
+    #[test]
+    fn test_page_range_ordering() {
+        let range = PageRange { start: 1, end: 10 };
+        assert!(range.start <= range.end);
+    }
+
+    #[test]
+    fn test_job_source_network_variant() {
+        let ip: std::net::IpAddr = "192.168.1.1".parse().expect("valid IP");
+        let source = JobSource::Network { remote_addr: ip };
+
+        match source {
+            JobSource::Network { remote_addr } => {
+                assert_eq!(remote_addr.to_string(), "192.168.1.1");
+            }
+            _ => panic!("Expected Network variant"),
+        }
+    }
+
+    #[test]
+    fn test_error_class_variants() {
+        assert_eq!(ErrorClass::Transient, ErrorClass::Transient);
+        assert_eq!(ErrorClass::UserAction, ErrorClass::UserAction);
+        assert_eq!(ErrorClass::Permanent, ErrorClass::Permanent);
+    }
+
+    #[test]
+    fn test_job_status_variants() {
+        let mut job = PrintJob::new(
+            JobSource::Local,
+            DocumentType::Pdf,
+            "test.pdf".to_string(),
+            "hash".to_string(),
+        );
+
+        job.status = JobStatus::Processing;
+        assert_eq!(job.status, JobStatus::Processing);
+
+        job.status = JobStatus::Failed;
+        assert_eq!(job.status, JobStatus::Failed);
+
+        job.status = JobStatus::Completed;
+        assert_eq!(job.status, JobStatus::Completed);
+    }
 }

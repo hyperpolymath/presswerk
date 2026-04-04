@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-||| Presswerk — Native platform bridge abstractions.
-|||
-||| This module defines the core traits and platform dispatch logic for the
-||| native SDK bridge. It allows the high-level Rust code to interact with
-||| iOS (Core Foundation) and Android (ART/JNI) APIs through a unified interface.
-|||
-||| SECURITY: Implementations must adhere to the proofs in `src/abi/Bridge.idr`.
+// Presswerk — Native platform bridge abstractions.
+//
+// This module defines the core traits and platform dispatch logic for the
+// native SDK bridge. It allows the high-level Rust code to interact with
+// iOS (Core Foundation) and Android (ART/JNI) APIs through a unified interface.
+//
+// SECURITY: Implementations must adhere to the proofs in `src/abi/Bridge.idr`.
 
 pub mod traits;
 

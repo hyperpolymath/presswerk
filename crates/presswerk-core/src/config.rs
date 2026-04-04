@@ -46,3 +46,68 @@ impl Default for AppConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = AppConfig::default();
+        assert_eq!(config.server_port, 631);
+        assert_eq!(config.print_timeout_secs, 60);
+        assert_eq!(config.query_timeout_secs, 15);
+        assert!(!config.auto_start_server);
+        assert!(config.server_require_tls);
+        assert!(!config.auto_accept_network_jobs);
+        assert!(config.audit_enabled);
+        assert!(config.encryption_enabled);
+        assert!(config.easy_mode);
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = AppConfig::default();
+        let json = serde_json::to_string(&config).expect("serialize");
+        assert!(!json.is_empty());
+
+        let restored: AppConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(config.server_port, restored.server_port);
+        assert_eq!(config.print_timeout_secs, restored.print_timeout_secs);
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let config = AppConfig {
+            server_port: 9631,
+            auto_start_server: true,
+            server_require_tls: false,
+            print_timeout_secs: 120,
+            query_timeout_secs: 30,
+            easy_mode: false,
+            ..Default::default()
+        };
+
+        assert_eq!(config.server_port, 9631);
+        assert!(config.auto_start_server);
+        assert!(!config.server_require_tls);
+        assert_eq!(config.print_timeout_secs, 120);
+        assert_eq!(config.query_timeout_secs, 30);
+        assert!(!config.easy_mode);
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config1 = AppConfig::default();
+        let config2 = config1.clone();
+        assert_eq!(config1.server_port, config2.server_port);
+        assert_eq!(config1.auto_start_server, config2.auto_start_server);
+    }
+
+    #[test]
+    fn test_timeout_invariant() {
+        let config = AppConfig::default();
+        // Print timeout should generally be >= query timeout
+        assert!(config.print_timeout_secs >= config.query_timeout_secs);
+    }
+}
