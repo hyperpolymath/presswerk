@@ -2,6 +2,8 @@
 # Presswerk — Build recipes
 
 # Default: run desktop dev server
+import? "contractile.just"
+
 default: dev
 
 # Run desktop dev server
