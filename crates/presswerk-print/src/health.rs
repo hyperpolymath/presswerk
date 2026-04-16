@@ -251,7 +251,7 @@ mod tests {
         tracker.record_success(uri);
         assert!(tracker.allow_request(uri));
         assert_eq!(
-            tracker.get_health(uri).unwrap().consecutive_failures,
+            tracker.get_health(uri).expect("TODO: handle error").consecutive_failures,
             0
         );
     }
@@ -267,7 +267,7 @@ mod tests {
 
         let msg = tracker.status_message(uri);
         assert!(msg.is_some());
-        assert!(msg.unwrap().contains("having trouble"));
+        assert!(msg.expect("TODO: handle error").contains("having trouble"));
     }
 
     #[test]

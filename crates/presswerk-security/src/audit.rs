@@ -216,24 +216,24 @@ mod tests {
     #[test]
     fn record_and_count() {
         let log = make_log();
-        assert_eq!(log.count().unwrap(), 0);
+        assert_eq!(log.count().expect("TODO: handle error"), 0);
 
-        log.record("encrypt", "abc123", true, None).unwrap();
+        log.record("encrypt", "abc123", true, None).expect("TODO: handle error");
         log.record("decrypt", "abc123", true, Some("round-trip test"))
-            .unwrap();
+            .expect("TODO: handle error");
 
-        assert_eq!(log.count().unwrap(), 2);
+        assert_eq!(log.count().expect("TODO: handle error"), 2);
     }
 
     #[test]
     fn entries_for_hash() {
         let log = make_log();
-        log.record("encrypt", "aaa", true, None).unwrap();
-        log.record("print", "bbb", true, None).unwrap();
+        log.record("encrypt", "aaa", true, None).expect("TODO: handle error");
+        log.record("print", "bbb", true, None).expect("TODO: handle error");
         log.record("decrypt", "aaa", false, Some("wrong key"))
-            .unwrap();
+            .expect("TODO: handle error");
 
-        let entries = log.entries_for_hash("aaa").unwrap();
+        let entries = log.entries_for_hash("aaa").expect("TODO: handle error");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].action, "encrypt");
         assert!(entries[0].success);
@@ -245,10 +245,10 @@ mod tests {
     fn recent_entries_ordering() {
         let log = make_log();
         for i in 0..5 {
-            log.record("op", &format!("hash_{i}"), true, None).unwrap();
+            log.record("op", &format!("hash_{i}"), true, None).expect("TODO: handle error");
         }
 
-        let recent = log.recent_entries(3).unwrap();
+        let recent = log.recent_entries(3).expect("TODO: handle error");
         assert_eq!(recent.len(), 3);
         // Newest first — IDs should be descending.
         assert!(recent[0].id > recent[1].id);
@@ -259,9 +259,9 @@ mod tests {
     fn failure_entry() {
         let log = make_log();
         log.record("decrypt", "deadbeef", false, Some("bad passphrase"))
-            .unwrap();
+            .expect("TODO: handle error");
 
-        let entries = log.entries_for_hash("deadbeef").unwrap();
+        let entries = log.entries_for_hash("deadbeef").expect("TODO: handle error");
         assert_eq!(entries.len(), 1);
         assert!(!entries[0].success);
         assert_eq!(entries[0].details.as_deref(), Some("bad passphrase"));

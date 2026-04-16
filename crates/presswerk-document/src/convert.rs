@@ -202,7 +202,7 @@ mod tests {
         supported.insert("application/pdf".into());
 
         let (result, doc_type) =
-            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported).unwrap();
+            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported).expect("TODO: handle error");
         assert_eq!(result, bytes);
         assert_eq!(doc_type, DocumentType::Pdf);
     }
@@ -213,7 +213,7 @@ mod tests {
         let supported = HashSet::new();
 
         let (result, doc_type) =
-            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported).unwrap();
+            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported).expect("TODO: handle error");
         assert_eq!(result, bytes);
         assert_eq!(doc_type, DocumentType::Pdf);
     }
