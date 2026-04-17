@@ -99,3 +99,11 @@ __pycache__/
 
 # Machine-readable locks
 .machine_readable/.locks/
+target/
+node_modules/
+_build/
+deps/
+.elixir_ls/
+.cache/
+build/
+dist/
