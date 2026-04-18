@@ -35,7 +35,7 @@ toc::[]
 presswerk/
 ├── Cargo.toml                    # Workspace root (6 crates)
 ├── Dioxus.toml                   # Dioxus CLI config (iOS/Android bundle IDs)
-├── justfile                      # Build recipes
+├── Justfile                      # Build recipes
 ├── crates/
 │   ├── presswerk-core/           # Shared types, errors, config
 │   ├── presswerk-security/       # Encrypted storage, audit trail, TLS certs
