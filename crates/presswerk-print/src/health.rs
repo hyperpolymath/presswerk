@@ -250,10 +250,10 @@ mod tests {
 
         tracker.record_success(uri);
         assert!(tracker.allow_request(uri));
-        assert_eq!(
-            tracker.get_health(uri).expect("TODO: handle error").consecutive_failures,
-            0
-        );
+        let Some(health) = tracker.get_health(uri) else {
+            panic!("no health status for {uri}");
+        };
+        assert_eq!(health.consecutive_failures, 0);
     }
 
     #[test]
@@ -265,9 +265,10 @@ mod tests {
             tracker.record_failure(uri, "timeout");
         }
 
-        let msg = tracker.status_message(uri);
-        assert!(msg.is_some());
-        assert!(msg.expect("TODO: handle error").contains("having trouble"));
+        let Some(msg) = tracker.status_message(uri) else {
+            panic!("expected status message for {uri}");
+        };
+        assert!(msg.contains("having trouble"));
     }
 
     #[test]

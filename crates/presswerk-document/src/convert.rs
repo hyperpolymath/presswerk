@@ -201,8 +201,10 @@ mod tests {
         let mut supported = HashSet::new();
         supported.insert("application/pdf".into());
 
-        let (result, doc_type) =
-            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported).expect("TODO: handle error");
+        let Ok((result, doc_type)) =
+            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported) else {
+            panic!("auto_convert failed for native format");
+        };
         assert_eq!(result, bytes);
         assert_eq!(doc_type, DocumentType::Pdf);
     }
@@ -212,8 +214,10 @@ mod tests {
         let bytes = b"test data";
         let supported = HashSet::new();
 
-        let (result, doc_type) =
-            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported).expect("TODO: handle error");
+        let Ok((result, doc_type)) =
+            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported) else {
+            panic!("auto_convert failed for empty supported");
+        };
         assert_eq!(result, bytes);
         assert_eq!(doc_type, DocumentType::Pdf);
     }

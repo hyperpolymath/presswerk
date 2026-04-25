@@ -139,13 +139,17 @@ mod tests {
 
     #[test]
     fn parse_mac_colon_format() {
-        let mac = parse_mac("AA:BB:CC:DD:EE:FF").expect("TODO: handle error");
+        let Some(mac) = parse_mac("AA:BB:CC:DD:EE:FF") else {
+            panic!("failed to parse valid MAC address");
+        };
         assert_eq!(mac, [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
     }
 
     #[test]
     fn parse_mac_dash_format() {
-        let mac = parse_mac("11-22-33-44-55-66").expect("TODO: handle error");
+        let Some(mac) = parse_mac("11-22-33-44-55-66") else {
+            panic!("failed to parse valid MAC address");
+        };
         assert_eq!(mac, [0x11, 0x22, 0x33, 0x44, 0x55, 0x66]);
     }
 
