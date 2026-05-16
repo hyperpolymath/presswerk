@@ -148,7 +148,12 @@ impl IppClient {
         builder = builder.attribute(IppAttribute::new(
             "print-color-mode",
             IppValue::Keyword(
-                if settings.color { "color" } else { "monochrome" }.into(),
+                if settings.color {
+                    "color"
+                } else {
+                    "monochrome"
+                }
+                .into(),
             ),
         ));
 
@@ -217,10 +222,7 @@ impl IppClient {
         )
         .await
         .map_err(|_| {
-            PresswerkError::IppRequest(format!(
-                "Get-Jobs timed out after {}s",
-                QUERY_TIMEOUT_SECS
-            ))
+            PresswerkError::IppRequest(format!("Get-Jobs timed out after {}s", QUERY_TIMEOUT_SECS))
         })?
         .map_err(|e| PresswerkError::IppRequest(format!("Get-Jobs: {e}")))?;
 

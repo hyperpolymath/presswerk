@@ -208,14 +208,19 @@ fn humanize_ipp_error(detail: &str) -> HumanError {
     } else if lower.contains("server-error") {
         HumanError {
             message: "The printer reported an internal error.".into(),
-            suggestion: "Try turning the printer off, waiting 10 seconds, and turning it back on.".into(),
+            suggestion: "Try turning the printer off, waiting 10 seconds, and turning it back on."
+                .into(),
             retriable: true,
             severity: Severity::Transient,
         }
-    } else if lower.contains("client-error-not-possible") || lower.contains("client-error-attributes") {
+    } else if lower.contains("client-error-not-possible")
+        || lower.contains("client-error-attributes")
+    {
         HumanError {
             message: "The printer can't handle those settings.".into(),
-            suggestion: "Try changing the print settings (paper size, duplex, colour) and print again.".into(),
+            suggestion:
+                "Try changing the print settings (paper size, duplex, colour) and print again."
+                    .into(),
             retriable: false,
             severity: Severity::ActionRequired,
         }
@@ -229,7 +234,8 @@ fn humanize_ipp_error(detail: &str) -> HumanError {
     } else if lower.contains("invalid uri") || lower.contains("invalid url") {
         HumanError {
             message: "The printer address doesn't look right.".into(),
-            suggestion: "Check the printer address and try again. It should look like 192.168.1.100.".into(),
+            suggestion:
+                "Check the printer address and try again. It should look like 192.168.1.100.".into(),
             retriable: false,
             severity: Severity::ActionRequired,
         }
@@ -240,7 +246,10 @@ fn humanize_ipp_error(detail: &str) -> HumanError {
             retriable: false,
             severity: Severity::ActionRequired,
         }
-    } else if lower.contains("toner-empty") || lower.contains("ink") || lower.contains("marker-supply") {
+    } else if lower.contains("toner-empty")
+        || lower.contains("ink")
+        || lower.contains("marker-supply")
+    {
         HumanError {
             message: "The printer needs new ink or toner.".into(),
             suggestion: "You'll need to buy a replacement cartridge. Check your printer's model number and search online for the right one.".into(),
@@ -265,7 +274,9 @@ fn humanize_ipp_error(detail: &str) -> HumanError {
         // Generic IPP error fallback
         HumanError {
             message: "The printer had a problem.".into(),
-            suggestion: format!("Try again. If this keeps happening, try turning the printer off and on again. (Detail: {detail})"),
+            suggestion: format!(
+                "Try again. If this keeps happening, try turning the printer off and on again. (Detail: {detail})"
+            ),
             retriable: true,
             severity: Severity::Transient,
         }

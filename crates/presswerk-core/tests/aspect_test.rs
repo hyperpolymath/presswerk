@@ -5,7 +5,7 @@
 // Tests security properties, invariants, and edge cases.
 
 use presswerk_core::{
-    AppConfig, DocumentType, PrintJob, PrintSettings, JobSource, PageRange, PaperSize,
+    AppConfig, DocumentType, JobSource, PageRange, PaperSize, PrintJob, PrintSettings,
 };
 
 // ============================================================================
@@ -34,8 +34,11 @@ fn aspect_html_injection_in_document_name() {
     for name in malicious_names {
         // These should be detected as suspicious by the application
         assert!(
-            name.contains('<') || name.contains('>') || name.contains('\'')
-                || name.contains('/') || name.contains('.'),
+            name.contains('<')
+                || name.contains('>')
+                || name.contains('\'')
+                || name.contains('/')
+                || name.contains('.'),
             "Potential injection in: {}",
             name
         );
@@ -55,7 +58,11 @@ fn aspect_path_traversal_prevention() {
         // Check for path traversal indicators
         let has_traversal = path.contains("../") || path.contains("..\\") || path.starts_with('/');
         if should_be_suspicious {
-            assert!(has_traversal, "Path traversal pattern should be detected in: {}", path);
+            assert!(
+                has_traversal,
+                "Path traversal pattern should be detected in: {}",
+                path
+            );
         }
     }
 }
@@ -90,7 +97,10 @@ fn aspect_page_count_validation() {
         "hash".to_string(),
     );
 
-    job.settings.page_range = Some(PageRange { start: 100, end: 50 });
+    job.settings.page_range = Some(PageRange {
+        start: 100,
+        end: 50,
+    });
 
     // Invalid range: start > end should be detected
     if let Some(range) = &job.settings.page_range {
@@ -113,7 +123,11 @@ fn aspect_invalid_dpi_detection() {
     const MAX_DPI: u32 = 1200;
 
     for dpi in valid_dpis {
-        assert!(dpi >= MIN_DPI && dpi <= MAX_DPI, "DPI {} should be valid", dpi);
+        assert!(
+            dpi >= MIN_DPI && dpi <= MAX_DPI,
+            "DPI {} should be valid",
+            dpi
+        );
     }
 
     for dpi in invalid_dpis {
@@ -177,7 +191,10 @@ fn aspect_error_message_sanitization() {
         // Check for common sensitive patterns
         let contains_password = msg.contains("password");
         let contains_ip = msg.contains("192.168");
-        assert!(contains_password || contains_ip, "Error message should contain sensitive data (for testing)");
+        assert!(
+            contains_password || contains_ip,
+            "Error message should contain sensitive data (for testing)"
+        );
         // In production, these should be redacted
     }
 }
@@ -246,7 +263,10 @@ fn aspect_max_copies_limit() {
 
     // Beyond practical limits would need manual override
     let excessive_copies = 10_000u32;
-    assert!(excessive_copies > MAX_COPIES, "Excessive copies should be detectable");
+    assert!(
+        excessive_copies > MAX_COPIES,
+        "Excessive copies should be detectable"
+    );
 }
 
 #[test]

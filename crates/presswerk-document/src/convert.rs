@@ -91,14 +91,10 @@ fn conversion_chain(source: DocumentType) -> Vec<DocumentType> {
             DocumentType::Pcl,
             DocumentType::PwgRaster,
         ],
-        DocumentType::PlainText => vec![
-            DocumentType::Pdf,
-            DocumentType::PostScript,
-        ],
-        DocumentType::Jpeg | DocumentType::Png | DocumentType::Tiff => vec![
-            DocumentType::Pdf,
-            DocumentType::PwgRaster,
-        ],
+        DocumentType::PlainText => vec![DocumentType::Pdf, DocumentType::PostScript],
+        DocumentType::Jpeg | DocumentType::Png | DocumentType::Tiff => {
+            vec![DocumentType::Pdf, DocumentType::PwgRaster]
+        }
         _ => vec![DocumentType::Pdf],
     }
 }
@@ -109,11 +105,7 @@ fn conversion_chain(source: DocumentType) -> Vec<DocumentType> {
 /// - PDF → PostScript: Ghostscript bindings or pure-Rust PS generator
 /// - PDF → Raster: pdf-render or similar crate
 /// - Text → PDF: Already handled by PdfWriter::create_from_text
-fn convert(
-    document_bytes: &[u8],
-    from: DocumentType,
-    to: DocumentType,
-) -> Result<Vec<u8>> {
+fn convert(document_bytes: &[u8], from: DocumentType, to: DocumentType) -> Result<Vec<u8>> {
     match (from, to) {
         // Text → PDF: use PdfWriter
         (DocumentType::PlainText, DocumentType::Pdf) => {
@@ -164,10 +156,7 @@ fn convert(
 }
 
 /// Rasterise a document to PNG as the ultimate fallback.
-fn rasterise_to_png(
-    document_bytes: &[u8],
-    source: DocumentType,
-) -> Result<Vec<u8>> {
+fn rasterise_to_png(document_bytes: &[u8], source: DocumentType) -> Result<Vec<u8>> {
     match source {
         // Images: just convert to PNG
         DocumentType::Jpeg | DocumentType::Tiff => {
@@ -202,7 +191,8 @@ mod tests {
         supported.insert("application/pdf".into());
 
         let Ok((result, doc_type)) =
-            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported) else {
+            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported)
+        else {
             panic!("auto_convert failed for native format");
         };
         assert_eq!(result, bytes);
@@ -215,7 +205,8 @@ mod tests {
         let supported = HashSet::new();
 
         let Ok((result, doc_type)) =
-            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported) else {
+            DocumentConverter::auto_convert(bytes, DocumentType::Pdf, &supported)
+        else {
             panic!("auto_convert failed for empty supported");
         };
         assert_eq!(result, bytes);

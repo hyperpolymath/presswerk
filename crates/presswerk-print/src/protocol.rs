@@ -73,10 +73,7 @@ pub struct ProbeResult {
 ///
 /// Returns the results for ALL protocols (not just the first success).
 /// This is used by the diagnostics engine to give a complete picture.
-pub async fn probe_all_protocols(
-    ip: &str,
-    base_port: u16,
-) -> Vec<ProbeResult> {
+pub async fn probe_all_protocols(ip: &str, base_port: u16) -> Vec<ProbeResult> {
     let mut results = Vec::new();
 
     for protocol in PrintProtocol::chain() {
@@ -97,10 +94,7 @@ pub async fn probe_all_protocols(
 /// Tries each protocol in security order and returns the first that works.
 /// Transparent to the user — they just see "Trying the best way to talk to
 /// your printer..."
-pub async fn find_best_protocol(
-    ip: &str,
-    base_port: u16,
-) -> Option<PrintProtocol> {
+pub async fn find_best_protocol(ip: &str, base_port: u16) -> Option<PrintProtocol> {
     for protocol in PrintProtocol::chain() {
         let port = if base_port != 631 {
             base_port
@@ -111,9 +105,7 @@ pub async fn find_best_protocol(
         if result.success {
             info!(
                 protocol = protocol.display_name(),
-                ip,
-                port,
-                "found working protocol"
+                ip, port, "found working protocol"
             );
             return Some(*protocol);
         }
@@ -158,9 +150,7 @@ pub async fn send_via_protocol(
         PrintProtocol::Lpr => {
             crate::lpr_client::send_lpr(ip, port, &document_bytes, job_name).await
         }
-        PrintProtocol::RawTcp => {
-            crate::raw_client::send_raw(ip, port, &document_bytes).await
-        }
+        PrintProtocol::RawTcp => crate::raw_client::send_raw(ip, port, &document_bytes).await,
     }
 }
 
@@ -187,8 +177,7 @@ async fn probe_protocol(ip: &str, port: u16, protocol: PrintProtocol) -> ProbeRe
 }
 
 async fn probe_ipp(uri: &str) -> std::result::Result<(), String> {
-    let client =
-        crate::ipp_client::IppClient::new(uri).map_err(|e| e.to_string())?;
+    let client = crate::ipp_client::IppClient::new(uri).map_err(|e| e.to_string())?;
     client
         .get_printer_attributes()
         .await
@@ -198,7 +187,9 @@ async fn probe_ipp(uri: &str) -> std::result::Result<(), String> {
 
 async fn probe_tcp(ip: &str, port: u16) -> std::result::Result<(), String> {
     let addr = format!("{}:{}", ip, port);
-    let addr: std::net::SocketAddr = addr.parse().map_err(|e: std::net::AddrParseError| e.to_string())?;
+    let addr: std::net::SocketAddr = addr
+        .parse()
+        .map_err(|e: std::net::AddrParseError| e.to_string())?;
     tokio::net::TcpStream::connect(addr)
         .await
         .map_err(|e| e.to_string())?;

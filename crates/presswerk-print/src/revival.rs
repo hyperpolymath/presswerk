@@ -96,9 +96,7 @@ pub async fn purge_stuck_jobs(printer_uri: &str) -> Result<()> {
 /// Probe a printer's current status.
 ///
 /// Returns a tuple of (state, reasons) from Get-Printer-Attributes.
-pub async fn probe_status(
-    printer_uri: &str,
-) -> Result<(String, Vec<String>)> {
+pub async fn probe_status(printer_uri: &str) -> Result<(String, Vec<String>)> {
     let client = crate::ipp_client::IppClient::new(printer_uri)?;
     let attrs = client.get_printer_attributes().await?;
 

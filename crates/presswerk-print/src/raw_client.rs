@@ -29,11 +29,7 @@ const RAW_TIMEOUT_SECS: u64 = 60;
 /// transmission, no job tracking.
 ///
 /// Returns the number of bytes sent (for progress tracking/resumption).
-pub async fn send_raw(
-    ip: &str,
-    port: u16,
-    document_bytes: &[u8],
-) -> Result<()> {
+pub async fn send_raw(ip: &str, port: u16, document_bytes: &[u8]) -> Result<()> {
     send_raw_with_offset(ip, port, document_bytes, 0).await
 }
 
@@ -71,15 +67,9 @@ pub async fn send_raw_with_offset(
 
     let mut sent = offset;
     for chunk in remaining.chunks(chunk_size) {
-        stream
-            .write_all(chunk)
-            .await
-            .map_err(|e| {
-                PresswerkError::IppRequest(format!(
-                    "Raw TCP send failed at byte {}: {}",
-                    sent, e
-                ))
-            })?;
+        stream.write_all(chunk).await.map_err(|e| {
+            PresswerkError::IppRequest(format!("Raw TCP send failed at byte {}: {}", sent, e))
+        })?;
         sent += chunk.len();
         debug!(sent, total = document_bytes.len(), "raw TCP progress");
     }

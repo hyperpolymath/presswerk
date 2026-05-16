@@ -4,7 +4,9 @@
 // Property-based tests for presswerk-core using proptest.
 // These tests verify invariants that must hold across all valid inputs.
 
-use presswerk_core::{AppConfig, DuplexMode, DocumentType, JobSource, Orientation, PaperSize, PrintJob, PrintSettings};
+use presswerk_core::{
+    AppConfig, DocumentType, DuplexMode, JobSource, Orientation, PaperSize, PrintJob, PrintSettings,
+};
 use proptest::prelude::*;
 
 // ============================================================================

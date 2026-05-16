@@ -165,8 +165,7 @@ pub fn AddPrinter() -> Element {
 
 /// Probe a printer by attempting Get-Printer-Attributes.
 async fn probe_printer(uri: &str) -> Result<(), String> {
-    let client = presswerk_print::ipp_client::IppClient::new(uri)
-        .map_err(|e| e.to_string())?;
+    let client = presswerk_print::ipp_client::IppClient::new(uri).map_err(|e| e.to_string())?;
     client
         .get_printer_attributes()
         .await

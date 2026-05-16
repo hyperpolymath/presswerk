@@ -269,8 +269,7 @@ impl AppServices {
                         Ok(remote_id) => {
                             info!(job_id = %job_id, remote_id, "print job accepted");
                             if let Ok(queue) = services.job_queue.lock() {
-                                let _ =
-                                    queue.update_status(&job_id, JobStatus::Completed, None);
+                                let _ = queue.update_status(&job_id, JobStatus::Completed, None);
                             }
                             services.audit("print_completed", &hash, true, None);
                         }
@@ -278,11 +277,7 @@ impl AppServices {
                             error!(job_id = %job_id, error = %e, "print job failed");
                             let msg = e.to_string();
                             if let Ok(queue) = services.job_queue.lock() {
-                                let _ = queue.update_status(
-                                    &job_id,
-                                    JobStatus::Failed,
-                                    Some(&msg),
-                                );
+                                let _ = queue.update_status(&job_id, JobStatus::Failed, Some(&msg));
                             }
                             services.audit("print_failed", &hash, false, Some(&msg));
                         }

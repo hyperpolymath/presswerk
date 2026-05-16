@@ -122,11 +122,7 @@ fn classify_ipp_detail(detail: &str) -> ErrorClass {
 }
 
 /// Decide whether to retry based on the error class and attempt count.
-pub fn should_retry(
-    err: &PresswerkError,
-    attempt: u32,
-    config: &RetryConfig,
-) -> RetryDecision {
+pub fn should_retry(err: &PresswerkError, attempt: u32, config: &RetryConfig) -> RetryDecision {
     let class = classify_error(err);
 
     match class {
@@ -195,8 +191,7 @@ mod tests {
 
     #[test]
     fn bad_format_is_permanent() {
-        let err =
-            PresswerkError::IppRequest("client-error-document-format-not-supported".into());
+        let err = PresswerkError::IppRequest("client-error-document-format-not-supported".into());
         assert_eq!(classify_error(&err), ErrorClass::Permanent);
     }
 
@@ -207,8 +202,14 @@ mod tests {
             ..Default::default()
         };
         let err = PresswerkError::IppRequest("connection refused".into());
-        assert!(matches!(should_retry(&err, 0, &config), RetryDecision::RetryAfter(_)));
-        assert!(matches!(should_retry(&err, 3, &config), RetryDecision::Exhausted));
+        assert!(matches!(
+            should_retry(&err, 0, &config),
+            RetryDecision::RetryAfter(_)
+        ));
+        assert!(matches!(
+            should_retry(&err, 3, &config),
+            RetryDecision::Exhausted
+        ));
     }
 
     #[test]

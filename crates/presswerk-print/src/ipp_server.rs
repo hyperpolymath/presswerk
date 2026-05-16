@@ -1599,7 +1599,13 @@ mod tests {
             99
         );
         // Last byte is end-of-attributes
-        assert_eq!(bytes.last().copied().unwrap_or_else(|| panic!("empty bytes")), TAG_END_OF_ATTRIBUTES);
+        assert_eq!(
+            bytes
+                .last()
+                .copied()
+                .unwrap_or_else(|| panic!("empty bytes")),
+            TAG_END_OF_ATTRIBUTES
+        );
     }
 
     #[test]
@@ -1673,7 +1679,10 @@ mod tests {
                      <ipp body here>";
         let result = parse_http_envelope(http);
         assert!(result.is_some());
-        let Some(req) = result else { panic!("parse_http_envelope failed") }; let req = req;
+        let Some(req) = result else {
+            panic!("parse_http_envelope failed")
+        };
+        let req = req;
         assert_eq!(req.content_length, Some(42));
         assert!(req.body_offset > 0);
         assert_eq!(&http[req.body_offset..], b"<ipp body here>");
@@ -1775,7 +1784,9 @@ mod tests {
         let state = make_shared_state();
         let data = build_test_ipp_request(OP_GET_PRINTER_ATTRIBUTES, 50, &[], &[]);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -1804,7 +1815,9 @@ mod tests {
         let state = make_shared_state();
         let data = build_test_ipp_request(OP_VALIDATE_JOB, 12, &[], &[]);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -1823,7 +1836,9 @@ mod tests {
         ];
         let data = build_test_ipp_request(OP_PRINT_JOB, 20, &attrs, doc);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "192.168.1.50:54321".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "192.168.1.50:54321"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -1857,16 +1872,21 @@ mod tests {
         let doc = b"some data";
         let data = build_test_ipp_request(OP_PRINT_JOB, 30, &[], doc);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
         let Some(job_group) = parsed
             .attribute_groups
             .iter()
-            .find(|g| g.delimiter == TAG_JOB_ATTRIBUTES) else {
+            .find(|g| g.delimiter == TAG_JOB_ATTRIBUTES)
+        else {
             panic!("job attributes group missing from response");
         };
-        let ipp_job_id = job_group.get_integer("job-id").expect("job-id attribute missing");
+        let ipp_job_id = job_group
+            .get_integer("job-id")
+            .expect("job-id attribute missing");
 
         // Now cancel it.
         let job_id_bytes = ipp_job_id.to_be_bytes();
@@ -1894,7 +1914,9 @@ mod tests {
         let attrs = vec![(VALUE_TAG_INTEGER, "job-id", &job_id_bytes[..])];
         let data = build_test_ipp_request(OP_CANCEL_JOB, 40, &attrs, &[]);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -1907,7 +1929,9 @@ mod tests {
         let state = make_shared_state();
         let data = build_test_ipp_request(OP_GET_JOBS, 60, &[], &[]);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -1920,7 +1944,9 @@ mod tests {
     #[test]
     fn dispatch_get_jobs_after_print() {
         let state = make_shared_state();
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         // Submit two jobs.
         for i in 0..2 {
@@ -1953,7 +1979,9 @@ mod tests {
         // Use a non-existent operation ID.
         let data = build_test_ipp_request(0x00FF, 70, &[], &[]);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "127.0.0.1:12345".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "127.0.0.1:12345"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -2024,7 +2052,9 @@ mod tests {
         ];
         let data = build_test_ipp_request(OP_PRINT_JOB, 200, &attrs, doc);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "10.0.0.1:9999".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "10.0.0.1:9999"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -2052,7 +2082,9 @@ mod tests {
         let state = make_shared_state_with_dir(tmp.path());
 
         let doc = b"identical content for dedup test";
-        let peer: SocketAddr = "10.0.0.1:9999".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "10.0.0.1:9999"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         // Submit the same document data twice (different job names).
         for i in 0..2u32 {
@@ -2088,7 +2120,9 @@ mod tests {
         // Submit a job with empty document data.
         let data = build_test_ipp_request(OP_PRINT_JOB, 400, &[], &[]);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "10.0.0.1:9999".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "10.0.0.1:9999"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
@@ -2123,7 +2157,8 @@ mod tests {
         let documents_dir = tmp.path().join("documents");
         std::fs::create_dir_all(&documents_dir).expect("filesystem operation failed");
         let content = b"test document bytes";
-        std::fs::write(documents_dir.join("deadbeef.dat"), content).expect("filesystem operation failed");
+        std::fs::write(documents_dir.join("deadbeef.dat"), content)
+            .expect("filesystem operation failed");
 
         let retrieved = server
             .retrieve_document("deadbeef")
@@ -2153,7 +2188,9 @@ mod tests {
         let attrs = vec![(VALUE_TAG_NAME, "job-name", b"Roundtrip Test" as &[u8])];
         let data = build_test_ipp_request(OP_PRINT_JOB, 500, &attrs, doc);
         let req = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "10.0.0.1:9999".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "10.0.0.1:9999"
+            .parse()
+            .expect("hardcoded address is invalid");
 
         let response = dispatch_operation(&req, peer, &state);
         let parsed = parse_ipp_request(&response).expect("parse_ipp_request failed");
