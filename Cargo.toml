@@ -41,7 +41,7 @@ mdns-sd = "0.13"
 
 # Document processing
 lopdf = "0.40"
-printpdf = "0.8"
+printpdf = "0.9"
 image = "0.25"
 imageproc = "0.26"
 
