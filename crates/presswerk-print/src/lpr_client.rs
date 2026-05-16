@@ -27,12 +27,7 @@ const LPR_TIMEOUT_SECS: u64 = 60;
 /// 1. Send "receive job" command (0x02)
 /// 2. Send control file with job metadata
 /// 3. Send data file with document bytes
-pub async fn send_lpr(
-    ip: &str,
-    port: u16,
-    document_bytes: &[u8],
-    job_name: &str,
-) -> Result<()> {
+pub async fn send_lpr(ip: &str, port: u16, document_bytes: &[u8], job_name: &str) -> Result<()> {
     let addr = format!("{}:{}", ip, port);
     info!(addr = %addr, job = job_name, "connecting via LPR");
 
@@ -73,13 +68,10 @@ pub async fn send_lpr(
     // Send control file
     let job_num = 1; // simplified — a real client would track this
     let hostname = "presswerk";
-    let control_file = format!("H{hostname}\nP{hostname}\nJ{job_name}\nldfA{job_num:03}{hostname}\nUdfA{job_num:03}{hostname}\nN{job_name}\n");
-    let cf_header = format!(
-        "\x02{} cfA{:03}{}\n",
-        control_file.len(),
-        job_num,
-        hostname
+    let control_file = format!(
+        "H{hostname}\nP{hostname}\nJ{job_name}\nldfA{job_num:03}{hostname}\nUdfA{job_num:03}{hostname}\nN{job_name}\n"
     );
+    let cf_header = format!("\x02{} cfA{:03}{}\n", control_file.len(), job_num, hostname);
 
     stream
         .write_all(cf_header.as_bytes())

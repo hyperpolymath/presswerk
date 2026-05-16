@@ -78,10 +78,7 @@ impl HealthTracker {
     /// Returns `true` if the circuit is closed or half-open (probe allowed).
     /// Returns `false` if the circuit is open (cooldown still active).
     pub fn allow_request(&mut self, printer_uri: &str) -> bool {
-        let health = self
-            .printers
-            .entry(printer_uri.to_string())
-            .or_default();
+        let health = self.printers.entry(printer_uri.to_string()).or_default();
 
         match health.state {
             CircuitState::Closed => true,
@@ -120,10 +117,7 @@ impl HealthTracker {
 
     /// Record a successful operation for this printer.
     pub fn record_success(&mut self, printer_uri: &str) {
-        let health = self
-            .printers
-            .entry(printer_uri.to_string())
-            .or_default();
+        let health = self.printers.entry(printer_uri.to_string()).or_default();
 
         if health.state != CircuitState::Closed {
             info!(
@@ -142,10 +136,7 @@ impl HealthTracker {
 
     /// Record a failed operation for this printer.
     pub fn record_failure(&mut self, printer_uri: &str, error: &str) {
-        let health = self
-            .printers
-            .entry(printer_uri.to_string())
-            .or_default();
+        let health = self.printers.entry(printer_uri.to_string()).or_default();
 
         health.consecutive_failures += 1;
         health.last_error = Some(error.to_string());
@@ -193,9 +184,7 @@ impl HealthTracker {
                     remaining.as_secs()
                 ))
             }
-            CircuitState::HalfOpen => {
-                Some("Checking if the printer has recovered...".into())
-            }
+            CircuitState::HalfOpen => Some("Checking if the printer has recovered...".into()),
         }
     }
 }

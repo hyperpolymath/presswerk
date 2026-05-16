@@ -879,7 +879,6 @@ impl NativeShare for IosBridge {
 // Tests
 // ---------------------------------------------------------------------------
 
-
 // ---------------------------------------------------------------------------
 // Stub implementations for connection types not yet wired to iOS APIs
 // ---------------------------------------------------------------------------
@@ -949,7 +948,12 @@ impl NativeThunderboltPrint for IosBridge {
         Err(PresswerkError::PlatformUnavailable)
     }
 
-    fn print_thunderbolt(&self, _device_id: &str, _document: &[u8], _mime_type: &str) -> Result<()> {
+    fn print_thunderbolt(
+        &self,
+        _device_id: &str,
+        _document: &[u8],
+        _mime_type: &str,
+    ) -> Result<()> {
         Err(PresswerkError::PlatformUnavailable)
     }
 }
@@ -1005,7 +1009,12 @@ impl NativeUsbDrivePrint for IosBridge {
         Err(PresswerkError::PlatformUnavailable)
     }
 
-    fn copy_to_usb_drive(&self, _drive_id: &str, _document: &[u8], _filename: &str) -> Result<String> {
+    fn copy_to_usb_drive(
+        &self,
+        _drive_id: &str,
+        _document: &[u8],
+        _filename: &str,
+    ) -> Result<String> {
         Err(PresswerkError::PlatformUnavailable)
     }
 }

@@ -13,7 +13,9 @@ use rusqlite::{Connection, params};
 use tracing::{debug, info, instrument};
 
 use presswerk_core::error::{PresswerkError, Result};
-use presswerk_core::types::{DocumentType, ErrorClass, JobId, JobSource, JobStatus, PrintJob, PrintSettings};
+use presswerk_core::types::{
+    DocumentType, ErrorClass, JobId, JobSource, JobStatus, PrintJob, PrintSettings,
+};
 
 /// SQLite schema for the jobs table.
 const CREATE_TABLE_SQL: &str = r#"
@@ -354,8 +356,7 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
     let error_class: Option<ErrorClass> =
         error_class_json.and_then(|s| serde_json::from_str(&s).ok());
 
-    let error_history: Vec<String> =
-        serde_json::from_str(&error_history_json).unwrap_or_default();
+    let error_history: Vec<String> = serde_json::from_str(&error_history_json).unwrap_or_default();
 
     Ok(PrintJob {
         id: JobId(uuid),

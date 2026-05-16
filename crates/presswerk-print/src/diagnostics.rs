@@ -208,7 +208,10 @@ fn check_network() -> StepResult {
             name: "Network Check".into(),
             passed: false,
             detail: "No network connection found.".into(),
-            fix: Some("Connect to your home Wi-Fi network. Go to Settings \u{2192} Wi-Fi on your phone.".into()),
+            fix: Some(
+                "Connect to your home Wi-Fi network. Go to Settings \u{2192} Wi-Fi on your phone."
+                    .into(),
+            ),
             escalation: None,
         }
     }
@@ -313,10 +316,7 @@ async fn check_ipp_support(uri: &str) -> StepResult {
     }
 }
 
-async fn check_printer_ready(
-    uri: &str,
-    report: &mut DiagnosticReport,
-) -> StepResult {
+async fn check_printer_ready(uri: &str, report: &mut DiagnosticReport) -> StepResult {
     let client = match crate::ipp_client::IppClient::new(uri) {
         Ok(c) => c,
         Err(_) => {
@@ -404,10 +404,7 @@ async fn check_printer_ready(
 }
 
 /// Interpret printer-state-reasons into human messages.
-fn interpret_stop_reasons(
-    name: &str,
-    reasons: &[String],
-) -> (String, String, Option<String>) {
+fn interpret_stop_reasons(name: &str, reasons: &[String]) -> (String, String, Option<String>) {
     for reason in reasons {
         let lower = reason.to_ascii_lowercase();
         if lower.contains("media-empty") || lower.contains("paper") && lower.contains("empty") {
@@ -417,7 +414,8 @@ fn interpret_stop_reasons(
                 None,
             );
         }
-        if lower.contains("toner-empty") || lower.contains("marker-supply") || lower.contains("ink") {
+        if lower.contains("toner-empty") || lower.contains("marker-supply") || lower.contains("ink")
+        {
             return (
                 format!("{name} needs new ink or toner."),
                 "You'll need to buy a replacement cartridge. Check the printer model number and search online.".into(),

@@ -106,10 +106,7 @@ impl NetworkResilience {
 
     /// Number of jobs in the buffer.
     pub fn buffered_count(&self) -> usize {
-        self.buffer
-            .lock()
-            .map(|b| b.len())
-            .unwrap_or(0)
+        self.buffer.lock().map(|b| b.len()).unwrap_or(0)
     }
 
     /// Take all buffered jobs for delivery (empties the buffer).

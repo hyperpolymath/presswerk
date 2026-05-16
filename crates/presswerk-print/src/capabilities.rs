@@ -34,8 +34,7 @@ impl PrinterCapabilities {
     pub fn from_attributes(attrs: &PrinterAttributes) -> Self {
         let media_supported = parse_set(attrs.get("media-supported"));
         let sides_supported = parse_set(attrs.get("sides-supported"));
-        let document_formats_supported =
-            parse_set(attrs.get("document-format-supported"));
+        let document_formats_supported = parse_set(attrs.get("document-format-supported"));
 
         // Default to true (assume colour) when attribute is absent — same
         // "unknown = assume yes" pattern used for media and sides.
@@ -209,19 +208,13 @@ pub fn auto_correct_settings(
 }
 
 /// Validate settings and return the result without correcting.
-pub fn validate_settings(
-    settings: &PrintSettings,
-    caps: &PrinterCapabilities,
-) -> ValidationResult {
+pub fn validate_settings(settings: &PrintSettings, caps: &PrinterCapabilities) -> ValidationResult {
     let (_, result) = auto_correct_settings(settings, caps);
     result
 }
 
 /// Try to find the closest standard paper size from the supported set.
-fn find_closest_media(
-    requested: &PaperSize,
-    supported: &HashSet<String>,
-) -> Option<PaperSize> {
+fn find_closest_media(requested: &PaperSize, supported: &HashSet<String>) -> Option<PaperSize> {
     let (req_w, req_h) = requested.dimensions_mm();
     let req_area = req_w * req_h;
 

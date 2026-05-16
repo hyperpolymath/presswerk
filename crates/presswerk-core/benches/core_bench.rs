@@ -4,10 +4,8 @@
 // Benchmarks for presswerk-core critical operations.
 // Run with: cargo bench -p presswerk-core
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use presswerk_core::{
-    AppConfig, DocumentType, PrintJob, PrintSettings, JobSource,
-};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use presswerk_core::{AppConfig, DocumentType, JobSource, PrintJob, PrintSettings};
 
 fn bench_config_creation(c: &mut Criterion) {
     c.bench_function("config_default", |b| {
@@ -41,8 +39,7 @@ fn bench_config_serialization(c: &mut Criterion) {
 
     c.bench_function("config_deserialize_json", |b| {
         b.iter(|| {
-            let _config: AppConfig =
-                serde_json::from_str(&black_box(&json)).expect("deserialize");
+            let _config: AppConfig = serde_json::from_str(&black_box(&json)).expect("deserialize");
         })
     });
 }
@@ -101,8 +98,7 @@ fn bench_job_serialization(c: &mut Criterion) {
 
     c.bench_function("job_deserialize_json", |b| {
         b.iter(|| {
-            let _job: PrintJob =
-                serde_json::from_str(&black_box(&json)).expect("deserialize");
+            let _job: PrintJob = serde_json::from_str(&black_box(&json)).expect("deserialize");
         })
     });
 }

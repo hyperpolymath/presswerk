@@ -21,7 +21,7 @@ pub mod android;
 pub mod stub;
 
 /// Retrieves the singleton bridge implementation for the target operating system.
-/// 
+///
 /// RETURNS: A boxed trait object (`dyn PlatformBridge`) that abstracts away
 /// the underlying native SDK details.
 pub fn platform_bridge() -> Box<dyn traits::PlatformBridge> {

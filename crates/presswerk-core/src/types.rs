@@ -368,17 +368,29 @@ mod tests {
     #[test]
     fn test_document_type_extensions() {
         assert_eq!(DocumentType::from_extension("pdf"), Some(DocumentType::Pdf));
-        assert_eq!(DocumentType::from_extension("jpg"), Some(DocumentType::Jpeg));
-        assert_eq!(DocumentType::from_extension("jpeg"), Some(DocumentType::Jpeg));
+        assert_eq!(
+            DocumentType::from_extension("jpg"),
+            Some(DocumentType::Jpeg)
+        );
+        assert_eq!(
+            DocumentType::from_extension("jpeg"),
+            Some(DocumentType::Jpeg)
+        );
         assert_eq!(DocumentType::from_extension("png"), Some(DocumentType::Png));
-        assert_eq!(DocumentType::from_extension("txt"), Some(DocumentType::PlainText));
+        assert_eq!(
+            DocumentType::from_extension("txt"),
+            Some(DocumentType::PlainText)
+        );
         assert_eq!(DocumentType::from_extension("unknown"), None);
     }
 
     #[test]
     fn test_document_type_case_insensitive() {
         assert_eq!(DocumentType::from_extension("PDF"), Some(DocumentType::Pdf));
-        assert_eq!(DocumentType::from_extension("JPG"), Some(DocumentType::Jpeg));
+        assert_eq!(
+            DocumentType::from_extension("JPG"),
+            Some(DocumentType::Jpeg)
+        );
         assert_eq!(DocumentType::from_extension("Pdf"), Some(DocumentType::Pdf));
     }
 
@@ -410,8 +422,14 @@ mod tests {
     #[test]
     fn test_duplex_mode_keywords() {
         assert_eq!(DuplexMode::Simplex.ipp_sides_keyword(), "one-sided");
-        assert_eq!(DuplexMode::LongEdge.ipp_sides_keyword(), "two-sided-long-edge");
-        assert_eq!(DuplexMode::ShortEdge.ipp_sides_keyword(), "two-sided-short-edge");
+        assert_eq!(
+            DuplexMode::LongEdge.ipp_sides_keyword(),
+            "two-sided-long-edge"
+        );
+        assert_eq!(
+            DuplexMode::ShortEdge.ipp_sides_keyword(),
+            "two-sided-short-edge"
+        );
     }
 
     #[test]

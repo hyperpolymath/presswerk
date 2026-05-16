@@ -5,8 +5,8 @@
 // Tests the complete workflows: configuration, job creation, serialization.
 
 use presswerk_core::{
-    AppConfig, DocumentType, DuplexMode, Orientation, PaperSize, PageRange,
-    PrintJob, PrintSettings, JobSource, JobStatus, ErrorClass,
+    AppConfig, DocumentType, DuplexMode, ErrorClass, JobSource, JobStatus, Orientation, PageRange,
+    PaperSize, PrintJob, PrintSettings,
 };
 
 #[test]
@@ -164,8 +164,14 @@ fn e2e_paper_size_ipp_mapping() {
 #[test]
 fn e2e_duplex_mode_ipp_mapping() {
     assert_eq!(DuplexMode::Simplex.ipp_sides_keyword(), "one-sided");
-    assert_eq!(DuplexMode::LongEdge.ipp_sides_keyword(), "two-sided-long-edge");
-    assert_eq!(DuplexMode::ShortEdge.ipp_sides_keyword(), "two-sided-short-edge");
+    assert_eq!(
+        DuplexMode::LongEdge.ipp_sides_keyword(),
+        "two-sided-long-edge"
+    );
+    assert_eq!(
+        DuplexMode::ShortEdge.ipp_sides_keyword(),
+        "two-sided-short-edge"
+    );
 }
 
 #[test]
