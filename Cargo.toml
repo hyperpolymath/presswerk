@@ -37,7 +37,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Print protocol
 ipp = { version = "6", features = ["async"] }
-mdns-sd = "0.13"
+mdns-sd = "0.19"
 
 # Document processing
 lopdf = "0.40"
