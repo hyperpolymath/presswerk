@@ -43,7 +43,7 @@ mdns-sd = "0.13"
 lopdf = "0.40"
 printpdf = "0.8"
 image = "0.25"
-imageproc = "0.25"
+imageproc = "0.26"
 
 # OCR (optional — behind "ocr" feature gate)
 ocrs = "0.12"
