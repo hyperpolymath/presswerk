@@ -29,5 +29,5 @@ objc2-ui-kit = { version = "0.3", features = [
 ] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = "0.21"
+jni = "0.22"
 ndk-context = "0.1"
