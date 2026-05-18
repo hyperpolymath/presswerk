@@ -1,12 +1,11 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
-# Presswerk — CodeQL workflow analysis (Rust not supported; scans Actions only)
+# SPDX-License-Identifier: PMPL-1.0
 name: CodeQL Security Analysis
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   schedule:
     - cron: '0 6 * * 1'
 
@@ -31,20 +30,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: actions
+          - language: javascript-typescript
             build-mode: none
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b2f9ef845756500b97acbdaf5c1dd4e9c1d15734 # v3
+        uses: github/codeql-action/init@c6f931105cb2c34c8f901cc885ba1e2e259cf745 # v3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@b2f9ef845756500b97acbdaf5c1dd4e9c1d15734 # v3
+        uses: github/codeql-action/analyze@c6f931105cb2c34c8f901cc885ba1e2e259cf745 # v3
         with:
           category: "/language:${{ matrix.language }}"
