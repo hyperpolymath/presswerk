@@ -3,7 +3,7 @@
 ||| Core types for the Presswerk print router with formal proofs of correctness.
 ||| All type definitions include C ABI size proofs and platform detection.
 |||
-||| SPDX-License-Identifier: PMPL-1.0-or-later
+||| SPDX-License-Identifier: MPL-2.0
 ||| Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 
 module Presswerk.ABI.Types

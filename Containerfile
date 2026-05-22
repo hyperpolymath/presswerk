@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # Presswerk — Verified container build (stapeln scheme)
@@ -140,7 +140,7 @@ LABEL org.opencontainers.image.description="High-assurance local print router/se
 LABEL org.opencontainers.image.url="https://github.com/hyperpolymath/presswerk"
 LABEL org.opencontainers.image.source="https://github.com/hyperpolymath/presswerk"
 LABEL org.opencontainers.image.version="0.3.0"
-LABEL org.opencontainers.image.licenses="PMPL-1.0-or-later"
+LABEL org.opencontainers.image.licenses="MPL-2.0"
 LABEL org.opencontainers.image.authors="Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>"
 LABEL org.opencontainers.image.vendor="hyperpolymath"
 LABEL org.opencontainers.image.base.name="cgr.dev/chainguard/wolfi-base:latest"

@@ -8,7 +8,7 @@
 ||| crate using the `age` and `ring` libraries. This Idris module serves as the 
 ||| high-level correctness contract.
 |||
-||| SPDX-License-Identifier: PMPL-1.0-or-later
+||| SPDX-License-Identifier: MPL-2.0
 ||| Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 
 module Presswerk.ABI.Encryption

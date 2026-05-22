@@ -2,7 +2,7 @@
 |||
 ||| Formal verification of IPP protocol correctness and job state machine.
 |||
-||| SPDX-License-Identifier: PMPL-1.0-or-later
+||| SPDX-License-Identifier: MPL-2.0
 ||| Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 
 module Presswerk.ABI.Protocol

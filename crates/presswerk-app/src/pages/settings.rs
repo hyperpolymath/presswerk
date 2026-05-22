@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
 // Settings page — persistent app configuration.
@@ -126,7 +126,7 @@ pub fn Settings() -> Element {
                     br {}
                     "High-Assurance Local Print Router/Server"
                     br {}
-                    "PMPL-1.0-or-later"
+                    "MPL-2.0"
                 }
             }
         }

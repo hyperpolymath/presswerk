@@ -314,7 +314,7 @@ crates/presswerk-security/src/lib.rs (fixed doc comment syntax)
 1. **Compilation:** All tests compile without warnings
 2. **Execution:** 100% pass rate (182/182)
 3. **Coverage:** All public APIs tested
-4. **Standards:** PMPL-1.0-or-later headers, proper attribution
+4. **Standards:** MPL-2.0 headers, proper attribution
 5. **Documentation:** Inline test documentation, module-level comments
 
 ---
@@ -382,5 +382,5 @@ test result: ok. 68 passed; 0 failed
 ---
 
 **Authored by:** Jonathan D.A. Jewell (hyperpolymath)  
-**Signed:** SPDX-License-Identifier: PMPL-1.0-or-later  
+**Signed:** SPDX-License-Identifier: MPL-2.0  
 **Date:** 2026-04-04

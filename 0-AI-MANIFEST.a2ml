@@ -53,7 +53,7 @@ Generated C headers in `generated/abi/`.
 
 1. **No SCM duplication** — Root must NOT contain .machine_readable/6a2/STATE.a2ml, .machine_readable/6a2/META.a2ml, etc.
 2. **Single source of truth** — `.machine_readable/` is authoritative
-3. **License** — All code PMPL-1.0-or-later
+3. **License** — All code MPL-2.0
 4. **Author** — "Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>"
 5. **No unsafe Rust** without `// SAFETY:` comment referencing ABI proofs
 6. **No banned crates** — No C-based OCR (Tesseract), no openssl (use ring/rustls)
@@ -88,5 +88,5 @@ Generated C headers in `generated/abi/`.
 - **Created:** 2026-02-13
 - **Updated:** 2026-02-14
 - **Maintained By:** Jonathan D.A. Jewell (hyperpolymath)
-- **License:** PMPL-1.0-or-later
+- **License:** MPL-2.0
 - **Protocol:** https://github.com/hyperpolymath/0-ai-gatekeeper-protocol
