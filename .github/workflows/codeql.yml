@@ -30,7 +30,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: javascript-typescript
+          # Repo has no JS/TS source — `javascript-typescript` matrix
+          # produced "no source files" failures on every CodeQL run.
+          # Switch to `actions` extractor (scans workflow files which
+          # every repo has). Per hypatia rule `codeql_language_matrix_mismatch`.
+          - language: actions
             build-mode: none
 
     steps:
