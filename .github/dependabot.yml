@@ -34,25 +34,55 @@ updates:
           - "patch"
 
   # Elixir/Mix
+    ignore:
+      # Estate policy standards#301 / docs/DEPENDABOT-POLICY.adoc:
+      # ignore semver-major bumps so they land via author-supplied PRs
+      # paired with call-site updates. Minor + patch flow normally.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "mix"
     directory: "/"
     schedule:
       interval: "weekly"
 
   # Node.js/npm
+    ignore:
+      # Estate policy standards#301 / docs/DEPENDABOT-POLICY.adoc:
+      # ignore semver-major bumps so they land via author-supplied PRs
+      # paired with call-site updates. Minor + patch flow normally.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
 
   # Python/pip
+    ignore:
+      # Estate policy standards#301 / docs/DEPENDABOT-POLICY.adoc:
+      # ignore semver-major bumps so they land via author-supplied PRs
+      # paired with call-site updates. Minor + patch flow normally.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
 
   # Nix flakes
+    ignore:
+      # Estate policy standards#301 / docs/DEPENDABOT-POLICY.adoc:
+      # ignore semver-major bumps so they land via author-supplied PRs
+      # paired with call-site updates. Minor + patch flow normally.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "nix"
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # Estate policy standards#301 / docs/DEPENDABOT-POLICY.adoc:
+      # ignore semver-major bumps so they land via author-supplied PRs
+      # paired with call-site updates. Minor + patch flow normally.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
