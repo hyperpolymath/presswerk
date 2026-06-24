@@ -382,5 +382,5 @@ test result: ok. 68 passed; 0 failed
 ---
 
 **Authored by:** Jonathan D.A. Jewell (hyperpolymath)  
-**Signed:** SPDX-License-Identifier: MPL-2.0  
+**Signed:** SPDX-License-Identifier: CC-BY-SA-4.0  
 **Date:** 2026-04-04

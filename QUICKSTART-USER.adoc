@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 // Template: QUICKSTART-USER.adoc — 5-minute path to working software
 // Replace presswerk, Presswerk — See README.adoc for details., just run, Presswerk started successfully. with actuals
 = presswerk — Quick Start for Users
