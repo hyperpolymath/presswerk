@@ -9,6 +9,7 @@ on:
       - "v*"
 
 permissions: write-all
+  actions: read
 
 jobs:
   build-linux:
