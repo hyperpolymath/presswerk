@@ -10,6 +10,7 @@ on:
     types: [published]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
