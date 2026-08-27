@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 # Presswerk — Build release binary and create GitHub Release on tag push
 
 name: Release
@@ -9,7 +10,7 @@ on:
     tags:
       - "v*"
 
-permissions: write-all
+permissions:
   actions: read
 
 jobs:
@@ -18,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.3.1
-      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+      - uses: dtolnay/rust-toolchain@v1
         with:
           targets: x86_64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2.8.2
