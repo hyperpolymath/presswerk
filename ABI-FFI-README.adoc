@@ -1,17 +1,20 @@
-# Presswerk ABI/FFI Documentation
+== Presswerk ABI/FFI Documentation
 
-## Overview
+=== Overview
 
-This library follows the **Hyperpolymath RSR Standard** for ABI and FFI design:
+This library follows the *Hyperpolymath RSR Standard* for ABI and FFI
+design:
 
-- **ABI (Application Binary Interface)** defined in **Idris2** with formal proofs
-- **FFI (Foreign Function Interface)** implemented in **Zig** for C compatibility
-- **Generated C headers** bridge Idris2 ABI to Zig FFI
-- **Any language** can call through standard C ABI
+* *ABI (Application Binary Interface)* defined in *Idris2* with formal
+proofs
+* *FFI (Foreign Function Interface)* implemented in *Zig* for C
+compatibility
+* *Generated C headers* bridge Idris2 ABI to Zig FFI
+* *Any language* can call through standard C ABI
 
-## Architecture
+=== Architecture
 
-```
+....
 ┌─────────────────────────────────────────────┐
 │  ABI Definitions (Idris2)                   │
 │  src/abi/                                   │
@@ -43,11 +46,11 @@ This library follows the **Hyperpolymath RSR Standard** for ABI and FFI design:
 │  Any Language via C ABI                     │
 │  - Rust, ReScript, Julia, Python, etc.     │
 └─────────────────────────────────────────────┘
-```
+....
 
-## Directory Structure
+=== Directory Structure
 
-```
+....
 presswerk/
 ├── src/
 │   ├── abi/                    # ABI definitions (Idris2)
@@ -78,15 +81,17 @@ presswerk/
     ├── rust/
     ├── rescript/
     └── julia/
-```
+....
 
-## Why Idris2 for ABI?
+=== Why Idris2 for ABI?
 
-### 1. **Formal Verification**
+==== 1. *Formal Verification*
 
-Idris2's dependent types allow proving properties about the ABI at compile-time:
+Idris2’s dependent types allow proving properties about the ABI at
+compile-time:
 
-```idris
+[source,idris]
+----
 -- Prove struct size is correct
 public export
 exampleStructSize : HasSize ExampleStruct 16
@@ -98,13 +103,14 @@ fieldAligned : Divides 8 (offsetOf ExampleStruct.field)
 -- Prove ABI is platform-compatible
 public export
 abiCompatible : Compatible (ABI 1) (ABI 2)
-```
+----
 
-### 2. **Type Safety**
+==== 2. *Type Safety*
 
 Encode invariants that C/Zig cannot express:
 
-```idris
+[source,idris]
+----
 -- Non-null pointer guaranteed at type level
 data Handle : Type where
   MkHandle : (ptr : Bits64) -> {auto 0 nonNull : So (ptr /= 0)} -> Handle
@@ -112,13 +118,14 @@ data Handle : Type where
 -- Array with length proof
 data Buffer : (n : Nat) -> Type where
   MkBuffer : Vect n Byte -> Buffer n
-```
+----
 
-### 3. **Platform Abstraction**
+==== 3. *Platform Abstraction*
 
 Platform-specific types with compile-time selection:
 
-```idris
+[source,idris]
+----
 CInt : Platform -> Type
 CInt Linux = Bits32
 CInt Windows = Bits32
@@ -126,13 +133,14 @@ CInt Windows = Bits32
 CSize : Platform -> Type
 CSize Linux = Bits64
 CSize Windows = Bits64
-```
+----
 
-### 4. **Safe Evolution**
+==== 4. *Safe Evolution*
 
 Prove that new ABI versions are backward-compatible:
 
-```idris
+[source,idris]
+----
 -- Compiler enforces compatibility
 abiUpgrade : ABI 1 -> ABI 2
 abiUpgrade old = MkABI2 {
@@ -141,15 +149,16 @@ abiUpgrade old = MkABI2 {
   -- Can add new fields
   new_features = defaults
 }
-```
+----
 
-## Why Zig for FFI?
+=== Why Zig for FFI?
 
-### 1. **C ABI Compatibility**
+==== 1. *C ABI Compatibility*
 
 Zig exports C-compatible functions naturally:
 
-```zig
+[source,zig]
+----
 export fn presswerk_init() ?*anyopaque {
     return internal_init() catch null;
 }
@@ -165,59 +174,65 @@ export fn presswerk_hash(handle: *anyopaque, data: [*]const u8, len: usize) u64 
 export fn presswerk_validate_transition(handle: *anyopaque, from: [*:0]const u8, to: [*:0]const u8) i32 {
     return if (internal_validate(handle, from, to)) 1 else 0;
 }
-```
+----
 
-### 2. **Memory Safety**
+==== 2. *Memory Safety*
 
 Compile-time safety without runtime overhead:
 
-```zig
+[source,zig]
+----
 // Null check enforced at compile time
 const handle = init() orelse return error.InitFailed;
 defer free(handle);
-```
+----
 
-### 3. **Cross-Compilation**
+==== 3. *Cross-Compilation*
 
 Built-in cross-compilation to any platform:
 
-```bash
+[source,bash]
+----
 zig build -Dtarget=x86_64-linux
 zig build -Dtarget=aarch64-macos
 zig build -Dtarget=x86_64-windows
-```
+----
 
-### 4. **Zero Dependencies**
+==== 4. *Zero Dependencies*
 
 No runtime, no libc required (unless explicitly needed):
 
-```zig
+[source,zig]
+----
 // Minimal binary size
 pub const lib = @import("std");
 // Only includes what you use
-```
+----
 
-## Building
+=== Building
 
-### Build FFI Library
+==== Build FFI Library
 
-```bash
+[source,bash]
+----
 cd ffi/zig
 zig build                         # Build debug
 zig build -Doptimize=ReleaseFast  # Build optimized
 zig build test                    # Run tests
-```
+----
 
-### Generate C Header from Idris2 ABI
+==== Generate C Header from Idris2 ABI
 
-```bash
+[source,bash]
+----
 cd src/abi
 idris2 --cg c-header Types.idr -o ../../generated/abi/presswerk.h
-```
+----
 
-### Cross-Compile
+==== Cross-Compile
 
-```bash
+[source,bash]
+----
 cd ffi/zig
 
 # Linux x86_64
@@ -228,13 +243,14 @@ zig build -Dtarget=aarch64-macos
 
 # Windows x86_64
 zig build -Dtarget=x86_64-windows
-```
+----
 
-## Usage
+=== Usage
 
-### From C
+==== From C
 
-```c
+[source,c]
+----
 #include "presswerk.h"
 
 int main() {
@@ -255,16 +271,19 @@ int main() {
     presswerk_free(handle);
     return 0;
 }
-```
+----
 
 Compile with:
-```bash
+
+[source,bash]
+----
 gcc -o example example.c -lpresswerk -L./zig-out/lib
-```
+----
 
-### From Idris2
+==== From Idris2
 
-```idris
+[source,idris]
+----
 import Presswerk.ABI.Foreign
 
 main : IO ()
@@ -280,11 +299,12 @@ main = do
 
   presswerk_free handle
   putStrLn "Success"
-```
+----
 
-### From Rust
+==== From Rust
 
-```rust
+[source,rust]
+----
 #[link(name = "presswerk")]
 extern "C" {
     fn presswerk_init() -> *mut std::ffi::c_void;
@@ -314,11 +334,12 @@ fn main() {
         presswerk_free(handle);
     }
 }
-```
+----
 
-### From Julia
+==== From Julia
 
-```julia
+[source,julia]
+----
 const libpresswerk = "libpresswerk"
 
 function presswerk_init()
@@ -353,27 +374,30 @@ try
 finally
     presswerk_free(handle)
 end
-```
+----
 
-## Testing
+=== Testing
 
-### Unit Tests (Zig)
+==== Unit Tests (Zig)
 
-```bash
+[source,bash]
+----
 cd ffi/zig
 zig build test
-```
+----
 
-### Integration Tests
+==== Integration Tests
 
-```bash
+[source,bash]
+----
 cd ffi/zig
 zig build test-integration
-```
+----
 
-### ABI Verification (Idris2)
+==== ABI Verification (Idris2)
 
-```idris
+[source,idris]
+----
 -- Compile-time verification
 %runElab verifyABI
 
@@ -383,44 +407,44 @@ main = do
   verifyLayoutsCorrect
   verifyAlignmentsCorrect
   putStrLn "ABI verification passed"
-```
+----
 
-## Contributing
+=== Contributing
 
 When modifying the ABI/FFI:
 
-1. **Update ABI first** (`src/abi/*.idr`)
-   - Modify type definitions
-   - Update proofs
-   - Ensure backward compatibility
+[arabic]
+. *Update ABI first* (`+src/abi/*.idr+`)
+* Modify type definitions
+* Update proofs
+* Ensure backward compatibility
+. *Generate C header*
++
+[source,bash]
+----
+idris2 --cg c-header src/abi/Types.idr -o generated/abi/presswerk.h
+----
+. *Update FFI implementation* (`+ffi/zig/src/main.zig+`)
+* Implement new functions
+* Match ABI types exactly
+. *Add tests*
+* Unit tests in Zig
+* Integration tests
+* ABI verification tests
+. *Update documentation*
+* Function signatures
+* Usage examples
+* Migration guide (if breaking changes)
 
-2. **Generate C header**
-   ```bash
-   idris2 --cg c-header src/abi/Types.idr -o generated/abi/presswerk.h
-   ```
-
-3. **Update FFI implementation** (`ffi/zig/src/main.zig`)
-   - Implement new functions
-   - Match ABI types exactly
-
-4. **Add tests**
-   - Unit tests in Zig
-   - Integration tests
-   - ABI verification tests
-
-5. **Update documentation**
-   - Function signatures
-   - Usage examples
-   - Migration guide (if breaking changes)
-
-## License
+=== License
 
 MPL-2.0
 
-## See Also
+=== See Also
 
-- [Idris2 Documentation](https://idris2.readthedocs.io)
-- [Zig Documentation](https://ziglang.org/documentation/master/)
-- [Rhodium Standard Repositories](https://github.com/hyperpolymath/rhodium-standard-repositories)
-- [FFI Migration Guide](../ffi-migration-guide.md)
-- [ABI Migration Guide](../abi-migration-guide.md)
+* https://idris2.readthedocs.io[Idris2 Documentation]
+* https://ziglang.org/documentation/master/[Zig Documentation]
+* https://github.com/hyperpolymath/rhodium-standard-repositories[Rhodium
+Standard Repositories]
+* link:../ffi-migration-guide.md[FFI Migration Guide]
+* link:../abi-migration-guide.md[ABI Migration Guide]

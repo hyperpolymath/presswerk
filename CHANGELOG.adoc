@@ -1,0 +1,140 @@
+== Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on https://keepachangelog.com/en/1.1.0/[Keep a
+Changelog], and this project adheres to
+https://semver.org/spec/v2.0.0.html[Semantic Versioning].
+
+=== [0.3.0] - 2026-02-14
+
+==== Added
+
+*v0.2 "`It Just Works`" — Reliability Hardening*
+
+* *Print settings transmission*: IPP attributes now actually sent to
+printers (copies, sides, media, orientation, print-color-mode,
+page-ranges)
+* *Human error messages*: Plain English error taxonomy — Transient,
+ActionRequired, Permanent, BuyRequired — with suggestions, not raw
+strings
+* *Retry engine*: Exponential backoff with jitter (max 5 retries,
+2s–120s), error classification (Transient/UserAction/Permanent)
+* *Connection timeouts*: 60s for print operations, 15s for queries (was:
+infinite hang)
+* *Circuit breaker*: Per-printer health tracking — 3 failures opens
+circuit for 30s, 5 for 2min, 10 for 5min
+* *Discovery improvements*: 15-second browse (was 5s), 30-second stale
+grace period, known_printers.json persistence
+* *Manual printer entry*: IP:port form with IPPS-first probe (validates
+via Get-Printer-Attributes)
+* *Capability validation*: Queries printer’s media-supported,
+sides-supported, color-supported, document-format-supported;
+auto-corrects impossible settings with user notice
+* *Progress feedback*: Multi-stage print progress (Preparing → Sending →
+Confirming → Complete/Failed/Retrying)
+* *Print Doctor wizard*: 6-step end-to-end diagnostic pipeline (network
+→ discovery → reachable → IPP → ready → test print) with shareable text
+summary for helpers
+* *Lock poisoning recovery*: `+acquire_lock()+` helper recovers from
+mutex poison via `+into_inner()+`
+
+*v0.3 "`Guaranteed Success`" — Universal Printer Support*
+
+* *Protocol downgrade*: IPPS → IPP/1.1 → IPP/1.0 → LPR/LPD (RFC 1179) →
+Raw TCP (port 9100), always starting from most secure
+* *Document format conversion*: PDF → PostScript → PCL → PWG Raster
+chain, auto-selects best format from printer’s capabilities
+* *Smart settings correction*: Auto-corrects invalid settings with
+yellow notice cards explaining each change
+* *Legacy printer support*: USB (IPP-USB + Printer Class), Bluetooth
+(BPP/HCRP/SPP), Wi-Fi Direct, NFC handover, plus Serial, Parallel,
+FireWire, Lightning, Thunderbolt, Infrared, iBeacon, LiFi, USB memory
+stick
+* *Network self-healing*: Buffers jobs during offline, auto-delivers on
+reconnect
+* *Dead printer revival*: Wake-on-LAN magic packets, SNMP status probes,
+IPP Purge-Jobs for stuck spoolers
+* *Print job resumption*: Byte-level tracking (bytes_sent/total_bytes)
+for raw/LPR resume
+* *Easy Mode UI*: 3-tap printing (Choose file → auto-select printer →
+PRINT), giant 80px+ touch targets, 24px+ text, default interface for
+Print Doctor
+* *Easy Jobs page*: Simplified job status with emoji icons
+(printing…/done!/problem)
+* *Text editor*: Create plain text, export PDF, print directly
+
+*Developer Resources*
+
+* *Printer specifications reference*:
+`+docs/specifications/PRINTER-SPECIFICATIONS.adoc+` — 60+ specs across
+18 categories (IPP, mDNS, LPR, USB, Bluetooth, NFC, Wi-Fi Direct, SNMP,
+PDLs, etc.)
+
+==== Changed
+
+* Workspace version bumped from 0.1.0 to 0.3.0
+* Containerfile image version updated to 0.3.0
+* `+color_supported+` defaults to `+true+` when printer doesn’t report
+capability (same pattern as media/sides)
+
+==== Fixed
+
+* Print settings silently discarded (SHOWSTOPPER — settings never
+reached the printer)
+* Clippy warnings: redundant closures, manual clamp, manual char
+comparison, missing Default impls, redundant pattern matching, dead code
+annotations
+
+=== https://github.com/hyperpolymath/presswerk/releases/tag/v0.1.0[0.1.0] - 2026-02-14
+
+==== Added
+
+* *presswerk-core*: Shared types (14 public types), error handling, app
+config
+* *presswerk-security*: age (X25519) encrypted storage, SHA-256 document
+integrity, Ed25519 TLS certificates, append-only SQLite audit trail
+* *presswerk-document*: PDF read/merge/split/rotate/crop (lopdf +
+printpdf), image processing (resize, rotate, crop, grayscale,
+brightness), scanning pipeline with Canny edge detection, Hough line
+detection, perspective correction, binarisation, OCR via ocrs (pure
+Rust)
+* *presswerk-print*: Full IPP/1.1 server (2,170 lines, RFC 8010/8011
+compliant), IPP client (Print-Job, Get-Printer-Attributes, Get-Jobs,
+Cancel-Job), mDNS/DNS-SD printer discovery, persistent SQLite job queue
+* *presswerk-bridge*: iOS native bridges (objc2 —
+UIPrintInteractionController, UIImagePickerController,
+UIDocumentPickerViewController, Security.framework Keychain,
+UIActivityViewController), Android native bridges (JNI — PrintManager,
+Intent ACTION_IMAGE_CAPTURE, Storage Access Framework, Android Keystore,
+Intent ACTION_SEND)
+* *presswerk-app*: Dioxus 0.7 UI with 10 pages (Home, Print, Scan, Edit,
+TextEditor, Server, Jobs, Audit, Settings), bottom tab navigation,
+AppServices layer with in-memory fallback mode
+* *Idris2 ABI proofs*: 5 proof files (Types, Protocol, Encryption,
+Layout, Bridge) — 0 Admitted, 0 believe_me
+* *Zig FFI*: C-compatible exports (8 functions, 5 tests)
+* *Benchmarks*: 7 criterion benchmarks (IPP parsing, response building,
+content hashing, encrypt/decrypt roundtrip, integrity hashing at 4
+sizes, audit recording, perspective correction)
+* *CI/CD*: 21 GitHub Actions workflows (CI, security scan, release,
+benchmarks, CodeQL, OpenSSF Scorecard, hypatia scan, mirror, quality,
+secret scanning)
+* *Containerfile*: Multi-stage chainguard (wolfi-base) build, non-root
+runtime, health check
+* *Trustfile*: 7-step security verification (ABI proofs, banned
+patterns, audit integrity, encryption safety, PQ readiness, hash
+compliance, policy hash)
+* *Content-addressed document storage*: Deduplication via SHA-256 hash
+filenames
+
+==== Security
+
+* 0 critical vulnerabilities (panic-attack scan)
+* 0 dependency vulnerabilities (cargo audit)
+* All `+unsafe+` blocks documented with `+// SAFETY:+` comments
+referencing Idris2 proofs
+* No banned patterns: 0 `+Admitted+`, 0 `+believe_me+`, 0 `+transmute+`,
+0 `+unsafePerformIO+`
+* Append-only audit trail (no DELETE/UPDATE)
+* Encryption key never persisted to disk
