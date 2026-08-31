@@ -9,6 +9,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 2
     groups:
       actions:
         patterns:
@@ -24,7 +25,7 @@ updates:
     # `ignore: "*" patch` rule also silenced security PRs under GitHub\'s
     # current Dependabot behaviour. See rsr-template-repo commit 78b050e
     # and 007-lang/audits/audit-dependabot-automation-gap-2026-04-17.md.
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     groups:
       cargo:
         patterns:
@@ -44,6 +45,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
 
   # Node.js/npm
     ignore:
@@ -56,6 +62,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
 
   # Python/pip
     ignore:
@@ -68,6 +79,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
 
   # Nix flakes
     ignore:
@@ -80,6 +96,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
     ignore:
       # Estate policy standards#301 / docs/DEPENDABOT-POLICY.adoc:
       # ignore semver-major bumps so they land via author-supplied PRs
