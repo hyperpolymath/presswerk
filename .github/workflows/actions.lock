@@ -3,14 +3,6 @@
 # Docs: https://gh.io/actions-lockfile
 version: 'v0.0.2'
 workflows:
-    '.github/workflows/governance.yml': []
-    '.github/workflows/hypatia-scan.yml': []
-    '.github/workflows/label-triage.yml': []
-    '.github/workflows/labels.yml': []
-    '.github/workflows/mirror.yml': []
-    '.github/workflows/rust-ci.yml': []
-    '.github/workflows/scorecard.yml': []
-    '.github/workflows/secret-scanner.yml': []
     '.github/workflows/bench.yml':
         - 'actions/checkout@v4.3.1'
         - 'dtolnay/rust-toolchain@v1'
@@ -37,14 +29,19 @@ workflows:
         - 'actions/checkout@v4.3.1'
         - 'hyperpolymath/a2ml-ecosystem@main'
         - 'hyperpolymath/k9-ecosystem@main'
+    '.github/workflows/governance.yml': []
+    '.github/workflows/hypatia-scan.yml': []
     '.github/workflows/instant-sync.yml':
         - 'peter-evans/repository-dispatch@v4.0.1'
+    '.github/workflows/label-triage.yml': []
+    '.github/workflows/labels.yml': []
+    '.github/workflows/mirror.yml': []
     '.github/workflows/pages.yml':
         - 'actions/checkout@v4.4.0'
         - 'actions/deploy-pages@v4.0.5'
         - 'actions/upload-pages-artifact@v3.0.1'
     '.github/workflows/push-email-notify.yml':
-        - 'dawidd6/action-send-mail@v3.12.0'
+        - 'hyperpolymath/smtp-notify-action@v0.2.0'
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v2.4.0'
         - 'actions/checkout@v4.3.1'
@@ -53,6 +50,9 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'softprops/action-gh-release@v2.5.0'
         - 'swatinem/rust-cache@v2.8.2'
+    '.github/workflows/rust-ci.yml': []
+    '.github/workflows/scorecard.yml': []
+    '.github/workflows/secret-scanner.yml': []
     '.github/workflows/security.yml':
         - 'actions/checkout@v4.3.1'
         - 'dtolnay/rust-toolchain@v1'
@@ -138,11 +138,6 @@ dependencies:
         repo_id: 496012378
         uses:
             - 'actions/upload-artifact@v4'
-    'dawidd6/action-send-mail@v3.12.0':
-        ref: 'v3.12.0'
-        commit: 'sha1-6e502825a508b867ab2954ad6343b68787624c01'
-        owner_id: 9713907
-        repo_id: 222439721
     'dependabot/fetch-metadata@v2.2.0':
         ref: 'v2.2.0'
         commit: 'sha1-dbb049abf0d677abbd7f7eee0375145b417fdd34'
@@ -173,6 +168,11 @@ dependencies:
         commit: 'sha1-89f3c2702f4f650a92aa7411502f38da06abd562'
         owner_id: 6759885
         repo_id: 1275650185
+    'hyperpolymath/smtp-notify-action@v0.2.0':
+        ref: 'v0.2.0'
+        commit: 'sha1-ede1191ef6ff3ac02c4f4d9efdf837ee517e11d7'
+        owner_id: 6759885
+        repo_id: 1352485172
     'peter-evans/repository-dispatch@v4.0.1':
         ref: 'v4.0.1'
         commit: 'sha1-28959ce8df70de7be546dd1250a005dd32156697'
