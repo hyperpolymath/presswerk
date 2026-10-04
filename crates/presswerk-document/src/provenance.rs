@@ -7,7 +7,9 @@
 use std::collections::HashSet;
 
 use lopdf::{Dictionary, Document, Object, ObjectId};
-use presswerk_core::provenance::{FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord};
+use presswerk_core::provenance::{
+    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord,
+};
 use presswerk_core::types::{DocumentType, FormProvenancePolicy};
 use tracing::{debug, instrument};
 
@@ -24,7 +26,11 @@ const FFP_NS: &[u8] = b"https://hyperpolymath.dev/ns/form-fill-provenance/1.0/";
 // ---------------------------------------------------------------------------
 
 #[instrument(skip_all, fields(bytes = data.len(), policy = %policy.as_token()))]
-pub fn classify_for_print(data: &[u8], document_type: DocumentType, policy: FormProvenancePolicy) -> FfpRecord {
+pub fn classify_for_print(
+    data: &[u8],
+    document_type: DocumentType,
+    policy: FormProvenancePolicy,
+) -> FfpRecord {
     if !policy.inspects() {
         debug!("form provenance inspection disabled by policy");
         return FfpRecord::unreadable("form provenance inspection is disabled");
@@ -91,7 +97,9 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
                 let tool_version = xmp_extract(&payload, "toolVersion");
                 let filled_at = xmp_extract(&payload, "filledAt");
                 let ap_gen_str = xmp_extract(&payload, "appearancesGenerated");
-                let ap_gen = ap_gen_str.as_deref().map(|s| s.eq_ignore_ascii_case("true"));
+                let ap_gen = ap_gen_str
+                    .as_deref()
+                    .map(|s| s.eq_ignore_ascii_case("true"));
 
                 if let Some(fb) = filled_by {
                     let fb_trim = fb.trim().to_string();
@@ -146,7 +154,11 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
         }
     };
 
-    let acroform_dict = match catalog.get(b"AcroForm").ok().and_then(|obj| resolve_dict(document, obj)) {
+    let acroform_dict = match catalog
+        .get(b"AcroForm")
+        .ok()
+        .and_then(|obj| resolve_dict(document, obj))
+    {
         Some(d) => d,
         None => {
             evidence.insert("FFP-E-NO-ACROFORM".to_string());
@@ -167,7 +179,10 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     };
 
     // NeedAppearances
-    if matches!(acroform_dict.get(b"NeedAppearances"), Ok(Object::Boolean(true))) {
+    if matches!(
+        acroform_dict.get(b"NeedAppearances"),
+        Ok(Object::Boolean(true))
+    ) {
         evidence.insert("FFP-E-NEED-APPEARANCES".to_string());
     }
 
@@ -180,7 +195,17 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     };
     let mut seen: HashSet<ObjectId> = HashSet::new();
     if let Ok(fields_obj) = acroform_dict.get(b"Fields") {
-        walk_field(document, fields_obj, "", "", "", 0, &mut seen, &mut scan, &mut evidence);
+        walk_field(
+            document,
+            fields_obj,
+            "",
+            "",
+            "",
+            0,
+            &mut seen,
+            &mut scan,
+            &mut evidence,
+        );
     }
 
     let total = scan.total;
@@ -218,12 +243,18 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     }
 
     // Step 6 — classify
-    let form = if total > 0 { FfpForm::Present } else { FfpForm::Absent };
+    let form = if total > 0 {
+        FfpForm::Present
+    } else {
+        FfpForm::Absent
+    };
     let classification = if filled == 0 {
         FfpClassification::BlankForm
     } else if declared_filled_by.as_deref() == Some("machine") {
         FfpClassification::MachineFilled
-    } else if evidence.contains("FFP-E-NEED-APPEARANCES") && evidence.contains("FFP-E-AP-INCOMPLETE") {
+    } else if evidence.contains("FFP-E-NEED-APPEARANCES")
+        && evidence.contains("FFP-E-AP-INCOMPLETE")
+    {
         FfpClassification::MachineFilledSuspected
     } else {
         FfpClassification::FilledUnknown
@@ -278,12 +309,32 @@ fn walk_field(
             }
             scan.visited += 1;
             if let Ok(resolved) = document.get_object(*id) {
-                walk_field(document, resolved, inherit_ft, inherit_ff, inherit_v, depth + 1, seen, scan, _evidence);
+                walk_field(
+                    document,
+                    resolved,
+                    inherit_ft,
+                    inherit_ff,
+                    inherit_v,
+                    depth + 1,
+                    seen,
+                    scan,
+                    _evidence,
+                );
             }
         }
         Object::Array(items) => {
             for item in items {
-                walk_field(document, item, inherit_ft, inherit_ff, inherit_v, depth + 1, seen, scan, _evidence);
+                walk_field(
+                    document,
+                    item,
+                    inherit_ft,
+                    inherit_ff,
+                    inherit_v,
+                    depth + 1,
+                    seen,
+                    scan,
+                    _evidence,
+                );
             }
         }
         Object::Dictionary(dict) => {
@@ -291,33 +342,57 @@ fn walk_field(
             // Inherit
             let ft = get_string_value(dict, b"FT").unwrap_or_else(|| inherit_ft.to_string());
             let ff = get_string_value(dict, b"Ff").unwrap_or_else(|| inherit_ff.to_string());
-            let v_raw = dict.get(b"V").ok().map(|o| object_to_string(o)).unwrap_or_else(|| inherit_v.to_string());
+            let v_raw = dict
+                .get(b"V")
+                .ok()
+                .map(|o| object_to_string(o))
+                .unwrap_or_else(|| inherit_v.to_string());
 
             // Check Kids
             if let Ok(kids_obj) = dict.get(b"Kids") {
                 let kids_ids = get_array_ids(document, kids_obj);
                 if !kids_ids.is_empty() {
                     // Check first kid's Subtype
-                    let first_is_widget = kids_ids.first().and_then(|id| document.get_object(*id).ok()).map(|obj| {
-                        if let Object::Dictionary(d) = obj {
-                            d.get(b"Subtype").ok().map(|s| format!("{:?}", s).contains("Widget")).unwrap_or(false)
-                        } else if let Object::Stream(s) = obj {
-                            s.dict.get(b"Subtype").ok().map(|v| format!("{:?}", v).contains("Widget")).unwrap_or(false)
-                        } else {
-                            false
-                        }
-                    }).unwrap_or(false);
+                    let first_is_widget = kids_ids
+                        .first()
+                        .and_then(|id| document.get_object(*id).ok())
+                        .map(|obj| {
+                            if let Object::Dictionary(d) = obj {
+                                d.get(b"Subtype")
+                                    .ok()
+                                    .map(|s| format!("{:?}", s).contains("Widget"))
+                                    .unwrap_or(false)
+                            } else if let Object::Stream(s) = obj {
+                                s.dict
+                                    .get(b"Subtype")
+                                    .ok()
+                                    .map(|v| format!("{:?}", v).contains("Widget"))
+                                    .unwrap_or(false)
+                            } else {
+                                false
+                            }
+                        })
+                        .unwrap_or(false);
 
                     // More robust: check via resolve
                     let first_id = kids_ids[0];
-                    let first_is_widget2 = document.get_object(first_id).ok().and_then(|o| {
-                        let dict_opt = match o {
-                            Object::Dictionary(d) => Some(d),
-                            Object::Stream(s) => Some(&s.dict),
-                            _ => None,
-                        };
-                        dict_opt.map(|d| d.get(b"Subtype").ok().map(|v| matches!(v, Object::Name(n) if n == b"Widget")).unwrap_or(false))
-                    }).unwrap_or(false);
+                    let first_is_widget2 = document
+                        .get_object(first_id)
+                        .ok()
+                        .and_then(|o| {
+                            let dict_opt = match o {
+                                Object::Dictionary(d) => Some(d),
+                                Object::Stream(s) => Some(&s.dict),
+                                _ => None,
+                            };
+                            dict_opt.map(|d| {
+                                d.get(b"Subtype")
+                                    .ok()
+                                    .map(|v| matches!(v, Object::Name(n) if n == b"Widget"))
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(false);
 
                     let is_widget = first_is_widget || first_is_widget2;
                     if is_widget {
@@ -327,7 +402,17 @@ fn walk_field(
                         // Intermediate — recurse
                         for kid_id in kids_ids {
                             if let Ok(kid_obj) = document.get_object(kid_id) {
-                                walk_field(document, kid_obj, &ft, &ff, &v_raw, depth + 1, seen, scan, _evidence);
+                                walk_field(
+                                    document,
+                                    kid_obj,
+                                    &ft,
+                                    &ff,
+                                    &v_raw,
+                                    depth + 1,
+                                    seen,
+                                    scan,
+                                    _evidence,
+                                );
                             }
                         }
                     }
@@ -344,24 +429,49 @@ fn walk_field(
             let dict = &stream.dict;
             let ft = get_string_value(dict, b"FT").unwrap_or_else(|| inherit_ft.to_string());
             let ff = get_string_value(dict, b"Ff").unwrap_or_else(|| inherit_ff.to_string());
-            let v_raw = dict.get(b"V").ok().map(|o| object_to_string(o)).unwrap_or_else(|| inherit_v.to_string());
+            let v_raw = dict
+                .get(b"V")
+                .ok()
+                .map(|o| object_to_string(o))
+                .unwrap_or_else(|| inherit_v.to_string());
             if let Ok(kids_obj) = dict.get(b"Kids") {
                 let kids_ids = get_array_ids(document, kids_obj);
                 if !kids_ids.is_empty() {
                     // Similar widget check
-                    let is_widget = kids_ids.first().and_then(|id| document.get_object(*id).ok()).map(|o| {
-                        match o {
-                            Object::Dictionary(d) => d.get(b"Subtype").ok().map(|v| matches!(v, Object::Name(n) if n == b"Widget")).unwrap_or(false),
-                            Object::Stream(s) => s.dict.get(b"Subtype").ok().map(|v| matches!(v, Object::Name(n) if n == b"Widget")).unwrap_or(false),
+                    let is_widget = kids_ids
+                        .first()
+                        .and_then(|id| document.get_object(*id).ok())
+                        .map(|o| match o {
+                            Object::Dictionary(d) => d
+                                .get(b"Subtype")
+                                .ok()
+                                .map(|v| matches!(v, Object::Name(n) if n == b"Widget"))
+                                .unwrap_or(false),
+                            Object::Stream(s) => s
+                                .dict
+                                .get(b"Subtype")
+                                .ok()
+                                .map(|v| matches!(v, Object::Name(n) if n == b"Widget"))
+                                .unwrap_or(false),
                             _ => false,
-                        }
-                    }).unwrap_or(false);
+                        })
+                        .unwrap_or(false);
                     if is_widget {
                         register_field(document, dict, &ft, &ff, &v_raw, &kids_ids, scan);
                     } else {
                         for kid_id in kids_ids {
                             if let Ok(kid_obj) = document.get_object(kid_id) {
-                                walk_field(document, kid_obj, &ft, &ff, &v_raw, depth + 1, seen, scan, _evidence);
+                                walk_field(
+                                    document,
+                                    kid_obj,
+                                    &ft,
+                                    &ff,
+                                    &v_raw,
+                                    depth + 1,
+                                    seen,
+                                    scan,
+                                    _evidence,
+                                );
                             }
                         }
                     }
@@ -384,7 +494,13 @@ fn register_field(
     scan: &mut FieldScan,
 ) {
     // Normalize FT: should be like "/Tx", "/Ch", "/Btn"
-    let ft_norm = if ft.starts_with('/') { ft.to_string() } else if !ft.is_empty() { format!("/{}", ft) } else { "".to_string() };
+    let ft_norm = if ft.starts_with('/') {
+        ft.to_string()
+    } else if !ft.is_empty() {
+        format!("/{}", ft)
+    } else {
+        "".to_string()
+    };
     if !matches!(ft_norm.as_str(), "/Tx" | "/Ch" | "/Btn") {
         return;
     }
@@ -559,8 +675,12 @@ fn is_meaningful(document: &Document, ft: &str, v_obj: Option<&Object>, v_raw: &
                     Object::Reference(id) => {
                         if let Ok(resolved) = document.get_object(*id) {
                             match resolved {
-                                Object::Name(name) => return !name.eq_ignore_ascii_case(b"Off") && !name.is_empty(),
-                                Object::String(bytes, _) => return !bytes.eq_ignore_ascii_case(b"Off") && !bytes.is_empty(),
+                                Object::Name(name) => {
+                                    return !name.eq_ignore_ascii_case(b"Off") && !name.is_empty();
+                                }
+                                Object::String(bytes, _) => {
+                                    return !bytes.eq_ignore_ascii_case(b"Off") && !bytes.is_empty();
+                                }
                                 _ => return false,
                             }
                         }
@@ -655,20 +775,28 @@ fn is_string_meaningful(bytes: &[u8]) -> bool {
     // We'll normalize: trim whitespace, then check if contains non-whitespace
     // For hex strings like "<...>", similar.
     // Simplify: remove surrounding `(` `)` or `<` `>` if present, then trim.
-    if s.len() >= 2 && s[0] == b'(' && s[s.len()-1] == b')' {
-        s = &s[1..s.len()-1];
+    if s.len() >= 2 && s[0] == b'(' && s[s.len() - 1] == b')' {
+        s = &s[1..s.len() - 1];
         // Unescape \( \) \\
         // For meaningful check, just check if after trimming whitespace there's content
     }
-    if s.len() >= 2 && s[0] == b'<' && s[s.len()-1] == b'>' {
-        s = &s[1..s.len()-1];
+    if s.len() >= 2 && s[0] == b'<' && s[s.len() - 1] == b'>' {
+        s = &s[1..s.len() - 1];
         // Hex: remove whitespace and 0s? Probe does gsub(/[ \t\r\n0]/,"",s) for hex.
         // We'll filter.
-        let filtered: Vec<u8> = s.iter().copied().filter(|&b| !b.is_ascii_whitespace() && b != b'0').collect();
+        let filtered: Vec<u8> = s
+            .iter()
+            .copied()
+            .filter(|&b| !b.is_ascii_whitespace() && b != b'0')
+            .collect();
         return !filtered.is_empty();
     }
     // Trim whitespace bytes
-    let trimmed: Vec<u8> = s.iter().copied().filter(|&b| b != b' ' && b != b'\t' && b != b'\r' && b != b'\n').collect();
+    let trimmed: Vec<u8> = s
+        .iter()
+        .copied()
+        .filter(|&b| b != b' ' && b != b'\t' && b != b'\r' && b != b'\n')
+        .collect();
     !trimmed.is_empty()
 }
 
@@ -680,11 +808,16 @@ fn resolve_dict<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Di
     match object {
         Object::Dictionary(dict) => Some(dict),
         Object::Stream(stream) => Some(&stream.dict),
-        Object::Reference(id) => document.get_object(*id).ok().and_then(|resolved| match resolved {
-            Object::Dictionary(dict) => Some(dict),
-            Object::Stream(stream) => Some(&stream.dict),
-            _ => None,
-        }),
+        Object::Reference(id) => {
+            document
+                .get_object(*id)
+                .ok()
+                .and_then(|resolved| match resolved {
+                    Object::Dictionary(dict) => Some(dict),
+                    Object::Stream(stream) => Some(&stream.dict),
+                    _ => None,
+                })
+        }
         _ => None,
     }
 }
@@ -693,10 +826,15 @@ fn resolve_dict<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Di
 fn resolve_array<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Vec<Object>> {
     match object {
         Object::Array(items) => Some(items),
-        Object::Reference(id) => document.get_object(*id).ok().and_then(|resolved| match resolved {
-            Object::Array(items) => Some(items),
-            _ => None,
-        }),
+        Object::Reference(id) => {
+            document
+                .get_object(*id)
+                .ok()
+                .and_then(|resolved| match resolved {
+                    Object::Array(items) => Some(items),
+                    _ => None,
+                })
+        }
         _ => None,
     }
 }
@@ -707,7 +845,11 @@ fn get_string_value(dict: &Dictionary, key: &[u8]) -> Option<String> {
         Ok(Object::String(bytes, _)) => Some(String::from_utf8_lossy(bytes).to_string()),
         Ok(Object::Integer(i)) => Some(i.to_string()),
         Ok(Object::Real(r)) => Some(r.to_string()),
-        Ok(Object::Boolean(b)) => Some(if *b { "true".to_string() } else { "false".to_string() }),
+        Ok(Object::Boolean(b)) => Some(if *b {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        }),
         Ok(Object::Reference(id)) => {
             // Try to resolve? For FT, Ff, V inheritance, the referenced value would be resolved elsewhere.
             // But we can try to get string from referenced object via dict lookup not available.
@@ -723,14 +865,22 @@ fn object_to_string(obj: &Object) -> String {
     match obj {
         Object::String(bytes, _) => format!("({})", String::from_utf8_lossy(bytes)),
         Object::Name(name) => format!("/{}", String::from_utf8_lossy(name)),
-        Object::Boolean(b) => if *b { "true".to_string() } else { "false".to_string() },
+        Object::Boolean(b) => {
+            if *b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }
+        }
         Object::Integer(i) => i.to_string(),
         Object::Real(r) => r.to_string(),
         Object::Null => "".to_string(),
         Object::Array(items) => {
             let mut s = String::from("[");
             for (i, item) in items.iter().enumerate() {
-                if i > 0 { s.push(' '); }
+                if i > 0 {
+                    s.push(' ');
+                }
                 s.push_str(&object_to_string(item));
             }
             s.push(']');
@@ -830,7 +980,10 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
                         _ => {
                             // Unquoted (should not happen for XMP but handle)
                             let mut end = 0;
-                            while end < rest.len() && !rest[end].is_ascii_whitespace() && rest[end] != b'>' {
+                            while end < rest.len()
+                                && !rest[end].is_ascii_whitespace()
+                                && rest[end] != b'>'
+                            {
                                 end += 1;
                             }
                             if end > 0 {
@@ -871,12 +1024,12 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
         }
     }
 
-    // Second pass for element form with prefix: search for `:prop>` 
+    // Second pass for element form with prefix: search for `:prop>`
     let prefixed = format!(":{}", prop);
     if let Some(pos) = find_ci(payload_bytes, prefixed.as_bytes()) {
         let after = pos + prefixed.len();
         if after < payload_bytes.len() && payload_bytes[after] == b'>' {
-            let rest = &payload_bytes[after+1..];
+            let rest = &payload_bytes[after + 1..];
             if let Some(end) = rest.iter().position(|&b| b == b'<') {
                 let val = &rest[..end];
                 let s = String::from_utf8_lossy(val).trim().to_string();
@@ -891,12 +1044,14 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
             rest = trim_ascii_start(rest);
             if !rest.is_empty() && rest[0] == b'=' {
                 rest = trim_ascii_start(&rest[1..]);
-                if !rest.is_empty() && (rest[0]==b'"' || rest[0]==b'\'') {
+                if !rest.is_empty() && (rest[0] == b'"' || rest[0] == b'\'') {
                     let quote = rest[0];
                     rest = &rest[1..];
                     if let Some(end) = rest.iter().position(|&b| b == quote) {
                         let s = String::from_utf8_lossy(&rest[..end]).trim().to_string();
-                        if !s.is_empty() { return Some(s); }
+                        if !s.is_empty() {
+                            return Some(s);
+                        }
                     }
                 }
             }
@@ -910,7 +1065,9 @@ fn find_ci(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() || haystack.len() < needle.len() {
         return None;
     }
-    haystack.windows(needle.len()).position(|w| w.eq_ignore_ascii_case(needle))
+    haystack
+        .windows(needle.len())
+        .position(|w| w.eq_ignore_ascii_case(needle))
 }
 
 fn trim_ascii_start(bytes: &[u8]) -> &[u8] {
@@ -934,22 +1091,45 @@ mod tests {
 
     impl TestField {
         const fn human(name: &'static str, value: &'static str) -> Self {
-            Self { name, value: Some(value), appearance: true }
+            Self {
+                name,
+                value: Some(value),
+                appearance: true,
+            }
         }
         const fn machine(name: &'static str, value: &'static str) -> Self {
-            Self { name, value: Some(value), appearance: false }
+            Self {
+                name,
+                value: Some(value),
+                appearance: false,
+            }
         }
         const fn blank(name: &'static str) -> Self {
-            Self { name, value: None, appearance: false }
+            Self {
+                name,
+                value: None,
+                appearance: false,
+            }
         }
     }
 
     fn build_pdf(fields: Vec<TestField>, need_appearances: bool, xmp: Option<String>) -> Vec<u8> {
         let mut document = Document::with_version("1.7");
-        let content_id = document.add_object(Object::Stream(lopdf::Stream::new(Dictionary::new(), Vec::new())));
+        let content_id = document.add_object(Object::Stream(lopdf::Stream::new(
+            Dictionary::new(),
+            Vec::new(),
+        )));
         let mut page = Dictionary::new();
         page.set("Type", Object::Name(b"Page".to_vec()));
-        page.set("MediaBox", Object::Array(vec![Object::Integer(0), Object::Integer(0), Object::Integer(595), Object::Integer(842)]));
+        page.set(
+            "MediaBox",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(595),
+                Object::Integer(842),
+            ]),
+        );
         page.set("Contents", Object::Reference(content_id));
         let page_id = document.add_object(Object::Dictionary(page));
         let mut pages = Dictionary::new();
@@ -963,17 +1143,25 @@ mod tests {
         let mut field_refs = Vec::new();
         for field in &fields {
             let mut dict = Dictionary::new();
-            dict.set("T", Object::String(field.name.as_bytes().to_vec(), StringFormat::Literal));
+            dict.set(
+                "T",
+                Object::String(field.name.as_bytes().to_vec(), StringFormat::Literal),
+            );
             dict.set("FT", Object::Name(b"Tx".to_vec()));
             if let Some(v) = field.value {
-                dict.set("V", Object::String(v.as_bytes().to_vec(), StringFormat::Literal));
+                dict.set(
+                    "V",
+                    Object::String(v.as_bytes().to_vec(), StringFormat::Literal),
+                );
             }
             if field.appearance {
                 let mut ap = Dictionary::new();
                 ap.set("N", Object::Null);
                 dict.set("AP", Object::Dictionary(ap));
             }
-            field_refs.push(Object::Reference(document.add_object(Object::Dictionary(dict))));
+            field_refs.push(Object::Reference(
+                document.add_object(Object::Dictionary(dict)),
+            ));
         }
         let mut catalog = Dictionary::new();
         catalog.set("Type", Object::Name(b"Catalog".to_vec()));
@@ -994,7 +1182,10 @@ mod tests {
             let mut meta_dict = Dictionary::new();
             meta_dict.set("Type", Object::Name(b"Metadata".to_vec()));
             meta_dict.set("Subtype", Object::Name(b"XML".to_vec()));
-            let meta_id = document.add_object(Object::Stream(lopdf::Stream::new(meta_dict, xmp_str.into_bytes())));
+            let meta_id = document.add_object(Object::Stream(lopdf::Stream::new(
+                meta_dict,
+                xmp_str.into_bytes(),
+            )));
             if let Ok(Object::Dictionary(cat)) = document.get_object_mut(catalog_id) {
                 cat.set("Metadata", Object::Reference(meta_id));
             }
@@ -1012,7 +1203,11 @@ mod tests {
 
     #[test]
     fn blank_form_not_machine() {
-        let bytes = build_pdf(vec![TestField::blank("surname"), TestField::blank("given")], false, None);
+        let bytes = build_pdf(
+            vec![TestField::blank("surname"), TestField::blank("given")],
+            false,
+            None,
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::BlankForm);
         assert_eq!(r.filled_fields, 0);
@@ -1020,7 +1215,14 @@ mod tests {
 
     #[test]
     fn machine_suspected_without_marker() {
-        let bytes = build_pdf(vec![TestField::machine("surname", "Smith"), TestField::machine("given", "Ada")], true, None);
+        let bytes = build_pdf(
+            vec![
+                TestField::machine("surname", "Smith"),
+                TestField::machine("given", "Ada"),
+            ],
+            true,
+            None,
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::MachineFilledSuspected);
     }
@@ -1028,15 +1230,29 @@ mod tests {
     #[test]
     fn machine_filled_with_marker() {
         let xmp = r#"<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:ffp="https://hyperpolymath.dev/ns/form-fill-provenance/1.0/" ffp:filledBy="machine" ffp:tool="blocky-writer"/></rdf:RDF></x:xmpmeta>"#.to_string();
-        let bytes = build_pdf(vec![TestField::machine("surname", "Smith")], true, Some(xmp));
+        let bytes = build_pdf(
+            vec![TestField::machine("surname", "Smith")],
+            true,
+            Some(xmp),
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::MachineFilled);
-        assert_eq!(r.declared.as_ref().unwrap().tool.as_deref(), Some("blocky-writer"));
+        assert_eq!(
+            r.declared.as_ref().unwrap().tool.as_deref(),
+            Some("blocky-writer")
+        );
     }
 
     #[test]
     fn viewer_filled_is_unknown() {
-        let bytes = build_pdf(vec![TestField::human("surname", "Smith"), TestField::human("given", "Ada")], false, None);
+        let bytes = build_pdf(
+            vec![
+                TestField::human("surname", "Smith"),
+                TestField::human("given", "Ada"),
+            ],
+            false,
+            None,
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::FilledUnknown);
         assert_eq!(r.appearances, FfpAppearances::Generated);
