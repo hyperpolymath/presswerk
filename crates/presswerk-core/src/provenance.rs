@@ -528,16 +528,14 @@ impl From<FormProvenanceLegacy> for FfpRecord {
                 filled_at: None,
                 appearances_generated: None,
             })
-        } else if let Some(p) = &legacy.producer {
-            Some(FfpDeclared {
+        } else {
+            legacy.producer.as_ref().map(|p| FfpDeclared {
                 filled_by: "machine".to_string(),
                 tool: Some(p.clone()),
                 tool_version: None,
                 filled_at: None,
                 appearances_generated: None,
             })
-        } else {
-            None
         };
         let mut evidence = Vec::new();
         if legacy.need_appearances {

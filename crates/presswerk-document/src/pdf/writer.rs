@@ -1,25 +1,27 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// PDF writer — create new PDF documents from text or images using `printpdf` 0.8.
+// PDF writer — create new PDF documents from text or images using `printpdf` 0.9.
 //
-// printpdf 0.8 uses a data-oriented API: documents are built by constructing
+// printpdf 0.9 uses a data-oriented API: documents are built by constructing
 // `PdfPage` structs containing `Vec<Op>` operation lists, then serialised via
-// `PdfDocument::save()`.
+// `PdfDocument::save()`. Text is emitted with the 1:1 PDF operators
+// `Op::SetFont` (`Tf`) and `Op::ShowText` (`Tj`/`TJ`); the 0.8-era
+// `SetFontSizeBuiltinFont` / `WriteTextBuiltinFont` ops were removed upstream.
 
 use std::path::Path;
 
 use presswerk_core::PaperSize;
 use presswerk_core::error::PresswerkError;
 use printpdf::{
-    BuiltinFont, Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, PdfWarnMsg, Point, Pt, RawImage,
-    RawImageData, RawImageFormat, TextItem, XObjectTransform,
+    BuiltinFont, Mm, Op, PdfDocument, PdfFontHandle, PdfPage, PdfSaveOptions, PdfWarnMsg, Point,
+    Pt, RawImage, RawImageData, RawImageFormat, TextItem, XObjectTransform,
 };
 use tracing::{debug, info, instrument};
 
 /// Creates new PDF documents from text content or raster images.
 ///
-/// Uses `printpdf` 0.8 for generation, producing standards-compliant PDF output
+/// Uses `printpdf` 0.9 for generation, producing standards-compliant PDF output
 /// suitable for printing.
 pub struct PdfWriter {
     /// Paper size for page creation.
@@ -119,13 +121,12 @@ impl PdfWriter {
                         y: Pt(y_pt),
                     },
                 });
-                ops.push(Op::SetFontSizeBuiltinFont {
+                ops.push(Op::SetFont {
+                    font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
                     size: Pt(font_size_pt),
-                    font: BuiltinFont::Helvetica,
                 });
-                ops.push(Op::WriteTextBuiltinFont {
+                ops.push(Op::ShowText {
                     items: vec![TextItem::Text(line.clone())],
-                    font: BuiltinFont::Helvetica,
                 });
                 ops.push(Op::EndTextSection);
 

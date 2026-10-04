@@ -10,7 +10,7 @@ workflows:
     '.github/workflows/fmt.yml':
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
-        - 'Swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@v2.9.2'
     '.github/workflows/boj-build.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/casket-pages.yml':
@@ -19,14 +19,14 @@ workflows:
         - 'actions/configure-pages@v6.0.0'
         - 'actions/deploy-pages@v5.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
-        - 'haskell-actions/setup@v2.12.0'
+        - 'haskell-actions/setup@v2.12.1'
     '.github/workflows/ci.yml':
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
         - 'swatinem/rust-cache@v2.9.2'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-        - 'github/codeql-action@v4.38.0'
+        - 'github/codeql-action@v4.38.2'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
@@ -54,10 +54,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'softprops/action-gh-release@v3.0.3'
         - 'swatinem/rust-cache@v2.9.2'
-    '.github/workflows/rust-ci.yml':
-        - 'actions/checkout@v7.0.1'
-        - 'dtolnay/rust-toolchain@v1'
-        - 'Swatinem/rust-cache@v2.9.2'
+    '.github/workflows/rust-ci.yml': []
     '.github/workflows/scorecard.yml': []
     '.github/workflows/secret-scanner.yml': []
     '.github/workflows/security.yml':
@@ -134,14 +131,14 @@ dependencies:
         commit: 'sha1-02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
         owner_id: 1940490
         repo_id: 260749683
-    'github/codeql-action@v4.38.0':
-        ref: 'v4.38.0'
-        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+    'github/codeql-action@v4.38.2':
+        ref: 'v4.38.2'
+        commit: 'sha1-2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
         owner_id: 9919
         repo_id: 259445878
-    'haskell-actions/setup@v2.12.0':
-        ref: 'v2.12.0'
-        commit: 'sha1-6037f33647c3f17758a2356c80fc4a53d7e0685d'
+    'haskell-actions/setup@v2.12.1':
+        ref: 'v2.12.1'
+        commit: 'sha1-0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d'
         owner_id: 75048950
         repo_id: 623796603
     'hyperpolymath/deed-ecosystem@main':
