@@ -750,15 +750,13 @@ fn get_array_ids(document: &Document, obj: &Object) -> Vec<ObjectId> {
             for item in items {
                 if let Object::Reference(id) = item {
                     ids.push(*id);
-                } else if let Object::Reference(id) = resolve_reference(document, item) {
-                    ids.push(id);
                 }
             }
         }
         Object::Reference(id) => {
             if let Ok(Object::Array(items)) = document.get_object(*id) {
                 for item in items {
-                    if let Object::Reference kid) = item {
+                    if let Object::Reference(kid) = item {
                         ids.push(*kid);
                     }
                 }
@@ -767,14 +765,6 @@ fn get_array_ids(document: &Document, obj: &Object) -> Vec<ObjectId> {
         _ => {}
     }
     ids
-}
-
-fn resolve_reference(document: &Document, obj: &Object) -> Option<ObjectId> {
-    if let Object::Reference(id) = obj {
-        Some(*id)
-    } else {
-        None
-    }
 }
 
 // ---------------------------------------------------------------------------
