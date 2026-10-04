@@ -492,19 +492,25 @@ impl From<FormProvenanceLegacy> for FfpRecord {
         } else {
             FfpAppearances::Generated
         };
-        let declared = legacy.marker.map(|m| FfpDeclared {
-            filled_by: m,
-            tool: legacy.producer,
-            tool_version: None,
-            filled_at: None,
-            appearances_generated: None,
-        }).or_else(|| legacy.producer.map(|p| FfpDeclared {
-            filled_by: "machine".to_string(),
-            tool: Some(p),
-            tool_version: None,
-            filled_at: None,
-            appearances_generated: None,
-        }));
+        let declared = if let Some(m) = &legacy.marker {
+            Some(FfpDeclared {
+                filled_by: m.clone(),
+                tool: legacy.producer.clone(),
+                tool_version: None,
+                filled_at: None,
+                appearances_generated: None,
+            })
+        } else if let Some(p) = &legacy.producer {
+            Some(FfpDeclared {
+                filled_by: "machine".to_string(),
+                tool: Some(p.clone()),
+                tool_version: None,
+                filled_at: None,
+                appearances_generated: None,
+            })
+        } else {
+            None
+        };
         let mut evidence = Vec::new();
         if legacy.need_appearances {
             evidence.push("FFP-E-NEED-APPEARANCES".to_string());
