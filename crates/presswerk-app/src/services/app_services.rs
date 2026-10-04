@@ -16,8 +16,8 @@ use presswerk_core::AppConfig;
 use presswerk_core::error::{PresswerkError, Result};
 use presswerk_core::provenance::FfpClassification;
 use presswerk_core::types::{
-    DiscoveredPrinter, DocumentType, JobId, JobSource, JobStatus, PrintJob,
-    PrintSettings, ServerStatus,
+    DiscoveredPrinter, DocumentType, JobId, JobSource, JobStatus, PrintJob, PrintSettings,
+    ServerStatus,
 };
 use presswerk_document::classify_for_print;
 use presswerk_print::discovery::PrinterDiscovery;
@@ -341,7 +341,12 @@ impl AppServices {
             queue.update_status(job_id, JobStatus::Pending, None)?;
         }
 
-        self.audit("job_released", &job.document_hash, true, Some(&job.document_name));
+        self.audit(
+            "job_released",
+            &job.document_hash,
+            true,
+            Some(&job.document_name),
+        );
 
         self.spawn_send(
             *job_id,

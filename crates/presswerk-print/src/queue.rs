@@ -428,7 +428,9 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
                     _ => cls,
                 };
                 match mapped {
-                    FfpClassification::NoForm => FfpRecord::no_form(vec!["FFP-E-NO-ACROFORM".to_string()]),
+                    FfpClassification::NoForm => {
+                        FfpRecord::no_form(vec!["FFP-E-NO-ACROFORM".to_string()])
+                    }
                     FfpClassification::BlankForm => FfpRecord {
                         ffp: "1.0".to_string(),
                         classification: FfpClassification::BlankForm,
@@ -439,7 +441,9 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
                         declared: None,
                         evidence: vec!["FFP-E-NO-VALUES".to_string()],
                     },
-                    FfpClassification::Unreadable => FfpRecord::unreadable("legacy row without provenance"),
+                    FfpClassification::Unreadable => {
+                        FfpRecord::unreadable("legacy row without provenance")
+                    }
                     _ => FfpRecord {
                         ffp: "1.0".to_string(),
                         classification: mapped,
@@ -675,11 +679,20 @@ mod tests {
         assert_eq!(retrieved.form_provenance, job.form_provenance);
         assert!(retrieved.form_provenance.is_machine_filled());
         assert_eq!(
-            retrieved.form_provenance.declared.as_ref().and_then(|d| d.tool.as_deref()),
+            retrieved
+                .form_provenance
+                .declared
+                .as_ref()
+                .and_then(|d| d.tool.as_deref()),
             Some("blocky-writer 0.4.2")
         );
         // canonical line preserved
-        assert!(retrieved.form_provenance.canonical_line().contains("machine-filled"));
+        assert!(
+            retrieved
+                .form_provenance
+                .canonical_line()
+                .contains("machine-filled")
+        );
     }
 
     #[test]
@@ -703,10 +716,12 @@ mod tests {
         assert_eq!(unreadable_jobs.len(), 1);
         assert_eq!(unreadable_jobs[0].id, plain.id);
 
-        assert!(queue
-            .get_jobs_with_form_origin(FfpClassification::FilledUnknown)
-            .expect("query human")
-            .is_empty());
+        assert!(
+            queue
+                .get_jobs_with_form_origin(FfpClassification::FilledUnknown)
+                .expect("query human")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -715,12 +730,16 @@ mod tests {
         let job = machine_filled_job();
         queue.insert_job(&job).expect("insert");
 
-        assert!(queue.get_all_jobs().expect("get_all")[0]
-            .form_provenance
-            .is_machine_filled());
-        assert!(queue.get_pending_jobs().expect("get_pending")[0]
-            .form_provenance
-            .is_machine_filled());
+        assert!(
+            queue.get_all_jobs().expect("get_all")[0]
+                .form_provenance
+                .is_machine_filled()
+        );
+        assert!(
+            queue.get_pending_jobs().expect("get_pending")[0]
+                .form_provenance
+                .is_machine_filled()
+        );
     }
 
     /// The `jobs` table as it stood before form provenance existed.
@@ -754,7 +773,8 @@ mod tests {
         // Write a row using the pre-provenance schema.
         {
             let conn = rusqlite::Connection::open(&path).expect("open legacy db");
-            conn.execute_batch(LEGACY_SCHEMA).expect("create legacy table");
+            conn.execute_batch(LEGACY_SCHEMA)
+                .expect("create legacy table");
             let now = Utc::now().to_rfc3339();
             conn.execute(
                 "INSERT INTO jobs (id, source, status, document_type, document_name,
@@ -793,7 +813,10 @@ mod tests {
         // A row with no provenance must read back as unreadable, never as a guessed determination.
         let provenance = &jobs[0].form_provenance;
         assert_eq!(provenance.classification, FfpClassification::Unreadable);
-        assert_eq!(provenance.form, presswerk_core::provenance::FfpForm::Unknown);
+        assert_eq!(
+            provenance.form,
+            presswerk_core::provenance::FfpForm::Unknown
+        );
         assert!(!provenance.is_machine_filled());
 
         // And new jobs written after migration carry their determination.

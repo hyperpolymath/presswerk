@@ -13,7 +13,7 @@ pub mod types;
 pub use config::AppConfig;
 pub use error::PresswerkError;
 pub use provenance::{
-    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord, FormOrigin,
-    FormProvenance, ProvenanceConfidence,
+    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord, FormOrigin, FormProvenance,
+    ProvenanceConfidence,
 };
 pub use types::*;
