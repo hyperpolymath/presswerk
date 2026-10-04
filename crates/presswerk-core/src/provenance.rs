@@ -154,6 +154,7 @@ pub struct FfpDeclared {
 }
 
 impl FfpDeclared {
+    /// Create a machine-filled declaration with optional tool and appearance metadata.
     pub fn machine(
         tool: Option<String>,
         tool_version: Option<String>,
@@ -482,6 +483,8 @@ pub type FormProvenance = FfpRecord;
 
 /// Convert legacy into new record (best-effort, for migration).
 impl From<FormProvenanceLegacy> for FfpRecord {
+    /// Migrate legacy provenance to FFP, mapping unmarked machine origins to suspected.
+    /// Preserve field counts and translate legacy signals into evidence codes.
     fn from(legacy: FormProvenanceLegacy) -> Self {
         // Map legacy origin → new classification
         let classification = match legacy.origin {
@@ -593,6 +596,7 @@ mod tests {
         }
     }
 
+    /// Verify the conformance line includes field counts and sorted evidence codes.
     #[test]
     fn canonical_line_format() {
         let r = FfpRecord {
@@ -615,6 +619,7 @@ mod tests {
         // evidence is sorted
     }
 
+    /// Verify audit JSON preserves the complete record and its declared metadata.
     #[test]
     fn json_roundtrip() {
         let r = FfpRecord {
@@ -638,6 +643,7 @@ mod tests {
         assert_eq!(back, r);
     }
 
+    /// Verify unreadable records emit the canonical unknown-form representation.
     #[test]
     fn unreadable_line() {
         let r = FfpRecord::unreadable("parse failed");
@@ -647,6 +653,7 @@ mod tests {
         );
     }
 
+    /// Verify review holds cover machine origins and incomplete filled appearances.
     #[test]
     fn should_hold() {
         use crate::types::FormProvenancePolicy;

@@ -672,6 +672,7 @@ mod tests {
         job
     }
 
+    /// Verify queue storage preserves the full provenance record and declared tool.
     #[test]
     fn provenance_roundtrips_through_the_queue() {
         let queue = JobQueue::open_in_memory().expect("open in-memory db");
@@ -698,6 +699,7 @@ mod tests {
         );
     }
 
+    /// Verify classification queries select machine and unreadable jobs independently.
     #[test]
     fn jobs_can_be_filtered_by_form_origin() {
         let queue = JobQueue::open_in_memory().expect("open in-memory db");
@@ -727,6 +729,7 @@ mod tests {
         );
     }
 
+    /// Verify both all-job and pending-job queries restore stored provenance.
     #[test]
     fn every_read_path_returns_the_stored_provenance() {
         let queue = JobQueue::open_in_memory().expect("open in-memory db");
@@ -768,6 +771,8 @@ mod tests {
         );
     "#;
 
+    /// Verify schema migration preserves legacy jobs with unreadable provenance
+    /// and supports storing and querying provenance on new jobs.
     #[test]
     fn legacy_database_is_migrated_and_reads_as_uninspected() {
         let dir = tempfile::TempDir::new().expect("create temp dir");

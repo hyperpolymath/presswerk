@@ -2440,6 +2440,7 @@ mod tests {
         parse_ipp_request(&response).expect("parse_ipp_request failed")
     }
 
+    /// Verify network submission stores queryable machine provenance while remaining pending.
     #[test]
     fn network_print_job_records_machine_filled_provenance() {
         let tmp = make_test_data_dir();
@@ -2484,6 +2485,7 @@ mod tests {
         );
     }
 
+    /// Verify network submission records machine provenance in the audit trail.
     #[test]
     fn network_print_job_writes_form_provenance_to_the_audit_trail() {
         let tmp = make_test_data_dir();
@@ -2507,6 +2509,7 @@ mod tests {
         );
     }
 
+    /// Verify invalid PDF input remains unreadable and creates no form-provenance audit entry.
     #[test]
     fn non_form_documents_are_not_audited_as_forms() {
         let tmp = make_test_data_dir();
@@ -2530,6 +2533,7 @@ mod tests {
         );
     }
 
+    /// Verify review policy holds a machine-filled job in IPP and storage and audits the hold.
     #[test]
     fn hold_policy_parks_machine_filled_form_for_review() {
         let tmp = make_test_data_dir();
@@ -2582,6 +2586,7 @@ mod tests {
         assert_eq!(jobs[0].status, JobStatus::Pending);
     }
 
+    /// Verify disabled inspection leaves provenance unreadable and the job pending.
     #[test]
     fn off_policy_skips_inspection_entirely() {
         let tmp = make_test_data_dir();

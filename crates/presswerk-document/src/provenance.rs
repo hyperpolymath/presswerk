@@ -25,6 +25,8 @@ const FFP_NS: &[u8] = b"https://hyperpolymath.dev/ns/form-fill-provenance/1.0/";
 // Public entry points
 // ---------------------------------------------------------------------------
 
+/// Classify document provenance according to the print inspection policy.
+/// Disabled inspection returns unreadable; otherwise non-PDF input returns no-form.
 #[instrument(skip_all, fields(bytes = data.len(), policy = %policy.as_token()))]
 pub fn classify_for_print(
     data: &[u8],
@@ -66,6 +68,8 @@ pub fn classify_pdf(data: &[u8]) -> FfpRecord {
     classify_document(&document, data)
 }
 
+/// Classify a parsed PDF using its XMP declaration and AcroForm field graph.
+/// The document structure determines the result; raw bytes may be empty.
 #[instrument(skip_all, fields(raw_bytes = raw.len()))]
 pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     // Cheap pre-check: if %PDF- missing, unreadable (matches probe)
@@ -288,6 +292,8 @@ struct FieldScan {
     visited: u32,
 }
 
+/// Traverse fields with inherited type, flags, and values, updating scan counts.
+/// Limit traversal by depth and visited-node count and skip seen references.
 fn walk_field(
     document: &Document,
     node: &Object,
@@ -484,6 +490,8 @@ fn walk_field(
     }
 }
 
+/// Count a fillable terminal field, its meaningful value, and missing appearances.
+/// Ignore unsupported field types and pushbuttons.
 fn register_field(
     document: &Document,
     field_dict: &Dictionary,
@@ -659,6 +667,8 @@ fn get_current_state(widget_dict: &Dictionary, v_raw: &str) -> String {
     "".to_string()
 }
 
+/// Check for a filled value using button, text, or choice-field rules.
+/// Use the inherited raw value when no value object is available.
 fn is_meaningful(document: &Document, ft: &str, v_obj: Option<&Object>, v_raw: &str) -> bool {
     match ft {
         "/Btn" => {
@@ -762,6 +772,8 @@ fn is_string_object_meaningful(document: &Document, obj: &Object) -> bool {
     }
 }
 
+/// Check for content after stripping literal or hex string delimiters.
+/// Ignore whitespace and, for hex strings, zero digits.
 fn is_string_meaningful(bytes: &[u8]) -> bool {
     // For Tx: string containing at least one non-whitespace
     // Whitespace is U+0020, 0009, 000D, 000A
@@ -804,6 +816,8 @@ fn is_string_meaningful(bytes: &[u8]) -> bool {
 // Helpers for PDF object graph
 // ---------------------------------------------------------------------------
 
+/// Return a dictionary or stream dictionary, resolving an indirect object if needed.
+/// Return `None` for missing references or other object types.
 fn resolve_dict<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Dictionary> {
     match object {
         Object::Dictionary(dict) => Some(dict),
@@ -822,6 +836,8 @@ fn resolve_dict<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Di
     }
 }
 
+/// Return an array, resolving an indirect object if needed.
+/// Return `None` for missing references or other object types.
 #[allow(dead_code)]
 fn resolve_array<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Vec<Object>> {
     match object {
@@ -839,6 +855,8 @@ fn resolve_array<'a>(document: &'a Document, object: &'a Object) -> Option<&'a V
     }
 }
 
+/// Read a direct name, string, number, or boolean as text.
+/// Return `None` for references and unsupported or missing values.
 fn get_string_value(dict: &Dictionary, key: &[u8]) -> Option<String> {
     match dict.get(key) {
         Ok(Object::Name(name)) => Some(String::from_utf8_lossy(name).to_string()),
@@ -861,6 +879,7 @@ fn get_string_value(dict: &Dictionary, key: &[u8]) -> Option<String> {
     }
 }
 
+/// Render a PDF value in the simplified syntax used for field-value inheritance.
 fn object_to_string(obj: &Object) -> String {
     match obj {
         Object::String(bytes, _) => format!("({})", String::from_utf8_lossy(bytes)),
@@ -893,6 +912,8 @@ fn object_to_string(obj: &Object) -> String {
     }
 }
 
+/// Collect references from a direct or indirect array, ignoring non-reference items.
+/// Return an empty vector when the object cannot be resolved to an array.
 fn get_array_ids(document: &Document, obj: &Object) -> Vec<ObjectId> {
     let mut ids = Vec::new();
     match obj {
@@ -940,6 +961,8 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
+/// Extract a nonempty trimmed property from XMP attribute or element text.
+/// Match property names without ASCII case sensitivity using byte scans, not XML parsing.
 fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
     let payload_str = String::from_utf8_lossy(payload);
     let payload_s = payload_str.as_ref();
@@ -1061,6 +1084,7 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
     None
 }
 
+/// Find the first ASCII case-insensitive byte match, or `None` for an empty needle.
 fn find_ci(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() || haystack.len() < needle.len() {
         return None;
@@ -1090,6 +1114,7 @@ mod tests {
     }
 
     impl TestField {
+        /// Build a filled test field with an appearance entry.
         const fn human(name: &'static str, value: &'static str) -> Self {
             Self {
                 name,
@@ -1097,6 +1122,7 @@ mod tests {
                 appearance: true,
             }
         }
+        /// Build a filled test field without an appearance entry.
         const fn machine(name: &'static str, value: &'static str) -> Self {
             Self {
                 name,
@@ -1104,6 +1130,7 @@ mod tests {
                 appearance: false,
             }
         }
+        /// Build a test field with neither a value nor an appearance entry.
         const fn blank(name: &'static str) -> Self {
             Self {
                 name,
@@ -1113,6 +1140,7 @@ mod tests {
         }
     }
 
+    /// Serialize a test PDF with text fields, an optional appearance flag, and optional XMP.
     fn build_pdf(fields: Vec<TestField>, need_appearances: bool, xmp: Option<String>) -> Vec<u8> {
         let mut document = Document::with_version("1.7");
         let content_id = document.add_object(Object::Stream(lopdf::Stream::new(
@@ -1201,6 +1229,7 @@ mod tests {
         assert_eq!(r.classification, FfpClassification::Unreadable);
     }
 
+    /// Verify empty fields classify as a blank form with zero filled fields.
     #[test]
     fn blank_form_not_machine() {
         let bytes = build_pdf(
@@ -1213,6 +1242,7 @@ mod tests {
         assert_eq!(r.filled_fields, 0);
     }
 
+    /// Verify missing appearances and NeedAppearances imply suspected machine filling.
     #[test]
     fn machine_suspected_without_marker() {
         let bytes = build_pdf(
@@ -1227,6 +1257,7 @@ mod tests {
         assert_eq!(r.classification, FfpClassification::MachineFilledSuspected);
     }
 
+    /// Verify an XMP machine declaration determines classification and retains its tool.
     #[test]
     fn machine_filled_with_marker() {
         let xmp = r#"<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:ffp="https://hyperpolymath.dev/ns/form-fill-provenance/1.0/" ffp:filledBy="machine" ffp:tool="blocky-writer"/></rdf:RDF></x:xmpmeta>"#.to_string();
@@ -1243,6 +1274,7 @@ mod tests {
         );
     }
 
+    /// Verify filled fields without a declaration retain unknown provenance.
     #[test]
     fn viewer_filled_is_unknown() {
         let bytes = build_pdf(

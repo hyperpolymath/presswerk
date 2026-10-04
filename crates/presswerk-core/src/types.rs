@@ -653,6 +653,7 @@ mod tests {
         assert!(!FormOrigin::NotAForm.is_machine());
     }
 
+    /// Verify default provenance is unreadable with unknown form presence.
     #[test]
     fn test_form_provenance_default_is_not_inspected() {
         let provenance = FormProvenance::default();
@@ -667,6 +668,7 @@ mod tests {
         assert_eq!(provenance.evidence, vec!["FFP-E-UNREADABLE".to_string()]);
     }
 
+    /// Verify new print jobs start with unreadable provenance and unknown form presence.
     #[test]
     fn test_print_job_defaults_to_uninspected_provenance() {
         let job = PrintJob::new(
@@ -708,6 +710,7 @@ mod tests {
         assert_eq!(provenance.summary(), "not an interactive form");
     }
 
+    /// Verify the declared tool reflects replacement of the declaration.
     #[test]
     fn test_form_provenance_declared_tool() {
         let mut provenance = machine_filled();
@@ -730,6 +733,7 @@ mod tests {
         );
     }
 
+    /// Verify audit JSON includes the FFP version and preserves provenance on decoding.
     #[test]
     fn test_form_provenance_audit_json_roundtrips() {
         let provenance = machine_filled();
@@ -744,6 +748,8 @@ mod tests {
         assert_eq!(restored, provenance);
     }
 
+    /// Verify review holds apply to machine origins and blank-print hazards,
+    /// while unreadable records and filled forms with generated appearances proceed.
     #[test]
     fn test_should_hold_only_for_positive_machine_determination() {
         let machine = machine_filled();
