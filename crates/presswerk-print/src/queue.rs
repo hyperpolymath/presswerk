@@ -13,9 +13,9 @@ use rusqlite::{Connection, params};
 use tracing::{debug, info, instrument};
 
 use presswerk_core::error::{PresswerkError, Result};
+use presswerk_core::provenance::{FfpClassification, FfpRecord, FormProvenanceLegacy};
 use presswerk_core::types::{
-    DocumentType, ErrorClass, FormOrigin, FormProvenance, JobId, JobSource, JobStatus, PrintJob,
-    PrintSettings,
+    DocumentType, ErrorClass, JobId, JobSource, JobStatus, PrintJob, PrintSettings,
 };
 
 /// SQLite schema for the jobs table.
@@ -166,7 +166,7 @@ impl JobQueue {
         let error_history_json = serde_json::to_string(&job.error_history)
             .map_err(|e| PresswerkError::Database(format!("serialize error_history: {e}")))?;
         let form_provenance_json = job.form_provenance.audit_json();
-        let form_origin = job.form_provenance.origin.as_token();
+        let form_origin = job.form_provenance.classification.as_str();
 
         self.conn
             .execute(
@@ -325,7 +325,7 @@ impl JobQueue {
     /// happens on the `form_origin` token column, so it never has to parse the
     /// JSON determination.
     #[instrument(skip(self), fields(origin = %origin))]
-    pub fn get_jobs_with_form_origin(&self, origin: FormOrigin) -> Result<Vec<PrintJob>> {
+    pub fn get_jobs_with_form_origin(&self, origin: FfpClassification) -> Result<Vec<PrintJob>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -339,7 +339,7 @@ impl JobQueue {
             .map_err(|e| PresswerkError::Database(format!("prepare get_by_origin: {e}")))?;
 
         let jobs = stmt
-            .query_map(params![origin.as_token()], row_to_print_job)
+            .query_map(params![origin.as_str()], row_to_print_job)
             .map_err(|e| PresswerkError::Database(format!("query get_by_origin: {e}")))?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| PresswerkError::Database(format!("collect rows: {e}")))?;
@@ -397,14 +397,66 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
     // inspected" — never as a guessed determination.
     let form_origin_token: Option<String> = row.get(17).unwrap_or(None);
     let form_provenance_json: Option<String> = row.get(18).unwrap_or(None);
-    let form_provenance: FormProvenance = form_provenance_json
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_else(|| FormProvenance {
-            origin: form_origin_token
-                .as_deref()
-                .map(FormOrigin::from_token)
-                .unwrap_or_default(),
-            ..FormProvenance::default()
+    // FFP v1.0 record; fallback to legacy JSON, then to origin token, then to unreadable.
+    let form_provenance: FfpRecord = form_provenance_json
+        .as_deref()
+        .and_then(|json| {
+            // Try new shape
+            if let Ok(rec) = serde_json::from_str::<FfpRecord>(json) {
+                // `ffp` must be "1.0" or missing defaults to 1.0; guard against empty `{}`
+                if rec.ffp == "1.0" || rec.ffp.is_empty() {
+                    // Empty `{}` parsed as default? Ensure classification is not default unreadable due to empty
+                    // If json was "{}", rec will be unreadable with UNREADABLE evidence — that's correct for legacy default.
+                    return Some(rec);
+                }
+                return Some(rec);
+            }
+            // Try legacy shape
+            if let Ok(legacy) = serde_json::from_str::<FormProvenanceLegacy>(json) {
+                return Some(FfpRecord::from(legacy));
+            }
+            None
+        })
+        .unwrap_or_else(|| {
+            // No JSON — infer from legacy origin token if present
+            if let Some(tok) = form_origin_token.as_deref() {
+                let cls = FfpClassification::from_str(tok);
+                // Handle legacy tokens that are not kebab-case
+                let mapped = match tok {
+                    "NotAForm" => FfpClassification::NoForm,
+                    "Empty" => FfpClassification::BlankForm,
+                    "Human" => FfpClassification::FilledUnknown,
+                    "Machine" => FfpClassification::MachineFilledSuspected,
+                    "Unknown" => FfpClassification::Unreadable,
+                    _ => cls,
+                };
+                match mapped {
+                    FfpClassification::NoForm => FfpRecord::no_form(vec!["FFP-E-NO-ACROFORM".to_string()]),
+                    FfpClassification::BlankForm => FfpRecord {
+                        ffp: "1.0".to_string(),
+                        classification: FfpClassification::BlankForm,
+                        form: presswerk_core::provenance::FfpForm::Present,
+                        filled_fields: 0,
+                        total_fields: 0,
+                        appearances: presswerk_core::provenance::FfpAppearances::NotApplicable,
+                        declared: None,
+                        evidence: vec!["FFP-E-NO-VALUES".to_string()],
+                    },
+                    FfpClassification::Unreadable => FfpRecord::unreadable("legacy row without provenance"),
+                    _ => FfpRecord {
+                        ffp: "1.0".to_string(),
+                        classification: mapped,
+                        form: presswerk_core::provenance::FfpForm::Unknown,
+                        filled_fields: 0,
+                        total_fields: 0,
+                        appearances: presswerk_core::provenance::FfpAppearances::Unknown,
+                        declared: None,
+                        evidence: vec!["FFP-E-UNREADABLE".to_string()],
+                    },
+                }
+            } else {
+                FfpRecord::unreadable("pre-migration row without provenance columns")
+            }
         });
 
     // Parse the UUID.  If the stored value is malformed we surface a
@@ -590,23 +642,28 @@ mod tests {
 
     // -- Form provenance (issue #118, ruling D189) --------------------------
 
-    /// A machine-filled determination, as the document crate would produce it.
+    /// A machine-filled determination, as the document crate would produce it (FFP v1.0).
     fn machine_filled_job() -> PrintJob {
         let mut job = test_job();
-        job.form_provenance = FormProvenance {
-            origin: FormOrigin::Machine,
-            confidence: presswerk_core::types::ProvenanceConfidence::Probable,
-            inspected: true,
-            is_form: true,
-            field_count: 14,
-            filled_field_count: 12,
-            values_without_appearance: 12,
-            filled_with_default: 12,
-            need_appearances: true,
-            producer: Some("blocky-writer 0.4.2".to_string()),
-            creator: None,
-            marker: None,
-            evidence: vec!["12 of 14 fields carry values".to_string()],
+        job.form_provenance = FfpRecord {
+            ffp: "1.0".to_string(),
+            classification: FfpClassification::MachineFilled,
+            form: presswerk_core::provenance::FfpForm::Present,
+            filled_fields: 12,
+            total_fields: 14,
+            appearances: presswerk_core::provenance::FfpAppearances::Incomplete,
+            declared: Some(presswerk_core::provenance::FfpDeclared {
+                filled_by: "machine".to_string(),
+                tool: Some("blocky-writer 0.4.2".to_string()),
+                tool_version: Some("0.4.2".to_string()),
+                filled_at: None,
+                appearances_generated: Some(false),
+            }),
+            evidence: vec![
+                "FFP-E-DECL-MACHINE".to_string(),
+                "FFP-E-NEED-APPEARANCES".to_string(),
+                "FFP-E-AP-INCOMPLETE".to_string(),
+            ],
         };
         job
     }
@@ -621,9 +678,11 @@ mod tests {
         assert_eq!(retrieved.form_provenance, job.form_provenance);
         assert!(retrieved.form_provenance.is_machine_filled());
         assert_eq!(
-            retrieved.form_provenance.producer.as_deref(),
+            retrieved.form_provenance.declared.as_ref().and_then(|d| d.tool.as_deref()),
             Some("blocky-writer 0.4.2")
         );
+        // canonical line preserved
+        assert!(retrieved.form_provenance.canonical_line().contains("machine-filled"));
     }
 
     #[test]
@@ -636,19 +695,19 @@ mod tests {
         queue.insert_job(&plain).expect("insert plain");
 
         let machine_jobs = queue
-            .get_jobs_with_form_origin(FormOrigin::Machine)
+            .get_jobs_with_form_origin(FfpClassification::MachineFilled)
             .expect("query machine");
         assert_eq!(machine_jobs.len(), 1);
         assert_eq!(machine_jobs[0].id, machine.id);
 
-        let unknown_jobs = queue
-            .get_jobs_with_form_origin(FormOrigin::Unknown)
-            .expect("query unknown");
-        assert_eq!(unknown_jobs.len(), 1);
-        assert_eq!(unknown_jobs[0].id, plain.id);
+        let unreadable_jobs = queue
+            .get_jobs_with_form_origin(FfpClassification::Unreadable)
+            .expect("query unreadable");
+        assert_eq!(unreadable_jobs.len(), 1);
+        assert_eq!(unreadable_jobs[0].id, plain.id);
 
         assert!(queue
-            .get_jobs_with_form_origin(FormOrigin::Human)
+            .get_jobs_with_form_origin(FfpClassification::FilledUnknown)
             .expect("query human")
             .is_empty());
     }
@@ -734,18 +793,17 @@ mod tests {
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].document_name, "legacy-form.pdf");
 
-        // A row with no provenance must read back as "not inspected", never as
-        // a guessed determination.
+        // A row with no provenance must read back as unreadable, never as a guessed determination.
         let provenance = &jobs[0].form_provenance;
-        assert!(!provenance.inspected);
-        assert_eq!(provenance.origin, FormOrigin::Unknown);
+        assert_eq!(provenance.classification, FfpClassification::Unreadable);
+        assert_eq!(provenance.form, presswerk_core::provenance::FfpForm::Unknown);
         assert!(!provenance.is_machine_filled());
 
         // And new jobs written after migration carry their determination.
         let fresh = machine_filled_job();
         queue.insert_job(&fresh).expect("insert post-migration job");
         let machine_jobs = queue
-            .get_jobs_with_form_origin(FormOrigin::Machine)
+            .get_jobs_with_form_origin(FfpClassification::MachineFilled)
             .expect("query machine");
         assert_eq!(machine_jobs.len(), 1);
         assert_eq!(machine_jobs[0].id, fresh.id);

@@ -231,232 +231,18 @@ pub struct PageRange {
 }
 
 // ---------------------------------------------------------------------------
-// Form provenance — machine-filled vs hand-filled (issue #118, ruling D189)
+// Form provenance — FFP v1.0.0 (issue #118, ruling D189)
+//
+// The wire types live in `crate::provenance` (ffp = "1.0").
+// This module re-exports them and keeps the legacy `FormOrigin`/`FormProvenance`
+// names as aliases so existing DB rows and tests can migrate gradually.
+// New code should use `Ffp*` via `crate::provenance` or `crate::*`.
 // ---------------------------------------------------------------------------
 
-/// How the values in an interactive (AcroForm) PDF came to be there.
-///
-/// Upstream form-fillers — for example
-/// [`blocky-writer`](https://github.com/hyperpolymath/blocky-writer), whose
-/// `fill_blocks` writes `/V`, `/DV` and `/AS` entries and sets
-/// `NeedAppearances` — emit an ordinary PDF byte stream. Nothing in those bytes
-/// says *who* wrote the values. Presswerk is usually the next thing that
-/// touches them: it prints them. So the print path classifies the document at
-/// the boundary and records the result for audit and routing.
-///
-/// The determination is heuristic unless an explicit marker is present; see
-/// `docs/ecosystem/FORM-PROVENANCE.adoc`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum FormOrigin {
-    /// The document carries no interactive form at all.
-    NotAForm,
-    /// The document is a form, but no field carries a value.
-    Empty,
-    /// Values are present and nothing suggests software wrote them.
-    Human,
-    /// Values are present and there is positive evidence software wrote them.
-    Machine,
-    /// Not determined: the document was not inspected, or inspection failed.
-    #[default]
-    Unknown,
-}
-
-impl FormOrigin {
-    /// Stable single-word token used in the database, logs and audit trail.
-    ///
-    /// Never contains whitespace or punctuation, so it is safe to embed in SQL
-    /// comparisons and log lines.
-    pub fn as_token(&self) -> &'static str {
-        match self {
-            Self::NotAForm => "NotAForm",
-            Self::Empty => "Empty",
-            Self::Human => "Human",
-            Self::Machine => "Machine",
-            Self::Unknown => "Unknown",
-        }
-    }
-
-    /// Inverse of [`Self::as_token`]. Unrecognised tokens map to `Unknown` —
-    /// an unparseable provenance must never be mistaken for a determination.
-    pub fn from_token(token: &str) -> Self {
-        match token {
-            "NotAForm" => Self::NotAForm,
-            "Empty" => Self::Empty,
-            "Human" => Self::Human,
-            "Machine" => Self::Machine,
-            _ => Self::Unknown,
-        }
-    }
-
-    /// Whether this is a positive determination that software filled the form.
-    pub fn is_machine(&self) -> bool {
-        matches!(self, Self::Machine)
-    }
-}
-
-impl std::fmt::Display for FormOrigin {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_token())
-    }
-}
-
-/// How much weight a [`FormProvenance`] determination deserves.
-///
-/// Ordered weakest to strongest so callers can compare with `<`/`>=`.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
-)]
-pub enum ProvenanceConfidence {
-    /// No determination was made.
-    #[default]
-    None,
-    /// A weak signal; treat as a hint only.
-    Speculative,
-    /// A characteristic combination of signals, but spoofable.
-    Probable,
-    /// A named tool known to fill forms programmatically.
-    Strong,
-    /// An explicit machine-readable provenance marker was present.
-    Explicit,
-}
-
-impl ProvenanceConfidence {
-    /// Stable token for logs and the audit trail.
-    pub fn as_token(&self) -> &'static str {
-        match self {
-            Self::None => "None",
-            Self::Speculative => "Speculative",
-            Self::Probable => "Probable",
-            Self::Strong => "Strong",
-            Self::Explicit => "Explicit",
-        }
-    }
-}
-
-impl std::fmt::Display for ProvenanceConfidence {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_token())
-    }
-}
-
-/// What the print path concluded about a document's form values.
-///
-/// Attached to every [`PrintJob`] so that the queue, the audit trail and the
-/// routing policy can all see the same determination.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FormProvenance {
-    /// The determination itself.
-    pub origin: FormOrigin,
-    /// How much weight the determination deserves.
-    pub confidence: ProvenanceConfidence,
-    /// Whether the document was actually inspected (`false` on parse failure,
-    /// non-PDF input, or when the document exceeded the inspection budget).
-    pub inspected: bool,
-    /// Whether the document carries an interactive form (AcroForm) at all.
-    pub is_form: bool,
-    /// Number of form fields found.
-    pub field_count: u32,
-    /// Number of fields carrying a value.
-    pub filled_field_count: u32,
-    /// Fields with a value but no `/AP` appearance stream — the classic
-    /// signature of a writer that set values without generating appearances.
-    pub values_without_appearance: u32,
-    /// Fields whose value was written alongside a `/DV` default. Interactive
-    /// viewers write `/V` only; writing `/DV` too is a programmatic signature.
-    pub filled_with_default: u32,
-    /// Whether the AcroForm sets `/NeedAppearances` true.
-    pub need_appearances: bool,
-    /// `/Producer` from the document information dictionary, if any.
-    pub producer: Option<String>,
-    /// `/Creator` from the document information dictionary, if any.
-    pub creator: Option<String>,
-    /// An explicit upstream provenance marker, if one was present.
-    pub marker: Option<String>,
-    /// Human-readable reasons for the determination, in order of weight.
-    pub evidence: Vec<String>,
-}
-
-impl Default for FormProvenance {
-    fn default() -> Self {
-        Self::not_inspected("document was not inspected")
-    }
-}
-
-impl FormProvenance {
-    /// Provenance for a document that was never inspected, with the reason.
-    pub fn not_inspected(reason: &str) -> Self {
-        Self {
-            origin: FormOrigin::Unknown,
-            confidence: ProvenanceConfidence::None,
-            inspected: false,
-            is_form: false,
-            field_count: 0,
-            filled_field_count: 0,
-            values_without_appearance: 0,
-            filled_with_default: 0,
-            need_appearances: false,
-            producer: None,
-            creator: None,
-            marker: None,
-            evidence: vec![reason.to_string()],
-        }
-    }
-
-    /// Whether the document carries an interactive form.
-    pub fn is_form(&self) -> bool {
-        self.is_form
-    }
-
-    /// Whether the form was determined to have been filled by software.
-    pub fn is_machine_filled(&self) -> bool {
-        self.origin.is_machine()
-    }
-
-    /// The tool responsible for the values, if one could be identified.
-    ///
-    /// Prefers the explicit marker over the `/Producer` string, since the
-    /// latter can be set by anything.
-    pub fn tool(&self) -> Option<&str> {
-        self.marker.as_deref().or(self.producer.as_deref())
-    }
-
-    /// Whether a job carrying this provenance should be held for user review
-    /// under `policy`.
-    ///
-    /// Only a *positive* machine determination holds a job: an uninspected or
-    /// undetermined document must not stall somebody's printout.
-    pub fn should_hold(&self, policy: FormProvenancePolicy) -> bool {
-        matches!(policy, FormProvenancePolicy::HoldForReview) && self.is_machine_filled()
-    }
-
-    /// One-line human summary for the UI, logs and the audit trail.
-    pub fn summary(&self) -> String {
-        let head = match self.origin {
-            FormOrigin::NotAForm => "not an interactive form".to_string(),
-            FormOrigin::Empty => "interactive form; no values entered".to_string(),
-            FormOrigin::Human => "form values present; no machine-fill evidence".to_string(),
-            FormOrigin::Machine => match self.tool() {
-                Some(tool) => format!("machine-filled form ({tool})"),
-                None => "machine-filled form".to_string(),
-            },
-            FormOrigin::Unknown => "form provenance not determined".to_string(),
-        };
-
-        if self.is_form {
-            format!(
-                "{head}; {}/{} fields filled",
-                self.filled_field_count, self.field_count
-            )
-        } else {
-            head
-        }
-    }
-
-    /// Compact JSON representation for the audit trail's `details` column.
-    pub fn audit_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
-    }
-}
+pub use crate::provenance::{
+    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord,
+    FormOrigin, FormProvenance, ProvenanceConfidence,
+};
 
 /// What the print path does with a machine-filled form (issue #118).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -811,22 +597,27 @@ mod tests {
 
     // -- Form provenance (issue #118) ---------------------------------------
 
-    /// Build a machine-filled determination the way the document crate does.
+    /// Build a machine-filled determination the way the document crate does (FFP v1.0).
     fn machine_filled() -> FormProvenance {
         FormProvenance {
-            origin: FormOrigin::Machine,
-            confidence: ProvenanceConfidence::Probable,
-            inspected: true,
-            is_form: true,
-            field_count: 14,
-            filled_field_count: 12,
-            values_without_appearance: 12,
-            filled_with_default: 12,
-            need_appearances: true,
-            producer: Some("blocky-writer 0.4.2".to_string()),
-            creator: None,
-            marker: None,
-            evidence: vec!["12 of 14 fields carry values and /NeedAppearances is set".to_string()],
+            ffp: "1.0".to_string(),
+            classification: crate::provenance::FfpClassification::MachineFilled,
+            form: crate::provenance::FfpForm::Present,
+            filled_fields: 12,
+            total_fields: 14,
+            appearances: crate::provenance::FfpAppearances::Incomplete,
+            declared: Some(crate::provenance::FfpDeclared {
+                filled_by: "machine".to_string(),
+                tool: Some("blocky-writer 0.4.2".to_string()),
+                tool_version: Some("0.4.2".to_string()),
+                filled_at: None,
+                appearances_generated: Some(false),
+            }),
+            evidence: vec![
+                "FFP-E-DECL-MACHINE".to_string(),
+                "FFP-E-NEED-APPEARANCES".to_string(),
+                "FFP-E-AP-INCOMPLETE".to_string(),
+            ],
         }
     }
 
@@ -865,12 +656,12 @@ mod tests {
     #[test]
     fn test_form_provenance_default_is_not_inspected() {
         let provenance = FormProvenance::default();
-        assert!(!provenance.inspected);
+        // Default is unreadable (form unknown, not a form)
         assert!(!provenance.is_form());
-        assert_eq!(provenance.origin, FormOrigin::Unknown);
-        assert_eq!(provenance.confidence, ProvenanceConfidence::None);
+        assert_eq!(provenance.classification, crate::provenance::FfpClassification::Unreadable);
+        assert_eq!(provenance.form, crate::provenance::FfpForm::Unknown);
         assert!(!provenance.is_machine_filled());
-        assert_eq!(provenance.evidence.len(), 1);
+        assert_eq!(provenance.evidence, vec!["FFP-E-UNREADABLE".to_string()]);
     }
 
     #[test]
@@ -881,8 +672,8 @@ mod tests {
             "test.pdf".to_string(),
             "hash".to_string(),
         );
-        assert!(!job.form_provenance.inspected);
-        assert_eq!(job.form_provenance.origin, FormOrigin::Unknown);
+        assert_eq!(job.form_provenance.classification, crate::provenance::FfpClassification::Unreadable);
+        assert_eq!(job.form_provenance.form, crate::provenance::FfpForm::Unknown);
     }
 
     #[test]
@@ -896,28 +687,40 @@ mod tests {
     #[test]
     fn test_form_provenance_summary_not_a_form_omits_counts() {
         let provenance = FormProvenance {
-            origin: FormOrigin::NotAForm,
-            confidence: ProvenanceConfidence::Strong,
-            inspected: true,
-            ..FormProvenance::default()
+            ffp: "1.0".to_string(),
+            classification: crate::provenance::FfpClassification::NoForm,
+            form: crate::provenance::FfpForm::Absent,
+            filled_fields: 0,
+            total_fields: 0,
+            appearances: crate::provenance::FfpAppearances::NotApplicable,
+            declared: None,
+            evidence: vec!["FFP-E-NO-ACROFORM".to_string()],
         };
         assert_eq!(provenance.summary(), "not an interactive form");
     }
 
     #[test]
-    fn test_form_provenance_prefers_marker_over_producer() {
+    fn test_form_provenance_declared_tool() {
         let mut provenance = machine_filled();
-        assert_eq!(provenance.tool(), Some("blocky-writer 0.4.2"));
+        assert_eq!(provenance.declared.as_ref().and_then(|d| d.tool.as_deref()), Some("blocky-writer 0.4.2"));
 
-        provenance.marker = Some("blocky-writer fillOrigin=machine".to_string());
-        assert_eq!(provenance.tool(), Some("blocky-writer fillOrigin=machine"));
+        // Declared tool is preferred
+        provenance.declared = Some(crate::provenance::FfpDeclared {
+            filled_by: "machine".to_string(),
+            tool: Some("other-tool".to_string()),
+            tool_version: None,
+            filled_at: None,
+            appearances_generated: None,
+        });
+        assert_eq!(provenance.declared.as_ref().and_then(|d| d.tool.as_deref()), Some("other-tool"));
     }
 
     #[test]
     fn test_form_provenance_audit_json_roundtrips() {
         let provenance = machine_filled();
         let json = provenance.audit_json();
-        assert!(json.contains("\"origin\":\"Machine\""), "{json}");
+        assert!(json.contains("\"classification\":\"machine-filled\""), "{json}");
+        assert!(json.contains("\"ffp\":\"1.0\""), "{json}");
 
         let restored: FormProvenance = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored, provenance);
@@ -930,16 +733,47 @@ mod tests {
         assert!(!machine.should_hold(FormProvenancePolicy::Record));
         assert!(!machine.should_hold(FormProvenancePolicy::Off));
 
-        // Undetermined provenance must never stall a printout.
+        // Undetermined (unreadable) must never stall a printout.
         let unknown = FormProvenance::default();
         assert!(!unknown.should_hold(FormProvenancePolicy::HoldForReview));
 
-        // Neither must a hand-filled form.
+        // Filled-unknown with generated appearances must not be held (no hazard, no machine)
         let human = FormProvenance {
-            origin: FormOrigin::Human,
-            ..FormProvenance::default()
+            ffp: "1.0".to_string(),
+            classification: crate::provenance::FfpClassification::FilledUnknown,
+            form: crate::provenance::FfpForm::Present,
+            filled_fields: 2,
+            total_fields: 2,
+            appearances: crate::provenance::FfpAppearances::Generated,
+            declared: None,
+            evidence: vec![],
         };
         assert!(!human.should_hold(FormProvenancePolicy::HoldForReview));
+
+        // But filled-unknown with incomplete appearances (hazard) SHOULD be held
+        let hazard = FormProvenance {
+            ffp: "1.0".to_string(),
+            classification: crate::provenance::FfpClassification::FilledUnknown,
+            form: crate::provenance::FfpForm::Present,
+            filled_fields: 2,
+            total_fields: 2,
+            appearances: crate::provenance::FfpAppearances::Incomplete,
+            declared: None,
+            evidence: vec!["FFP-E-AP-INCOMPLETE".to_string()],
+        };
+        assert!(hazard.should_hold(FormProvenancePolicy::HoldForReview));
+        // Machine-filled-suspected must be held
+        let suspected = FormProvenance {
+            ffp: "1.0".to_string(),
+            classification: crate::provenance::FfpClassification::MachineFilledSuspected,
+            form: crate::provenance::FfpForm::Present,
+            filled_fields: 2,
+            total_fields: 2,
+            appearances: crate::provenance::FfpAppearances::Incomplete,
+            declared: None,
+            evidence: vec!["FFP-E-NEED-APPEARANCES".to_string(), "FFP-E-AP-INCOMPLETE".to_string()],
+        };
+        assert!(suspected.should_hold(FormProvenancePolicy::HoldForReview));
     }
 
     #[test]

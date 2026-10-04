@@ -1,0 +1,1 @@
+microsoft appxmanifest placeholder

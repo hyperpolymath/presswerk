@@ -8,6 +8,7 @@
 
 use dioxus::prelude::*;
 
+use presswerk_core::provenance::{FfpRecord, FormProvenanceLegacy};
 use presswerk_core::types::FormProvenance;
 use presswerk_security::audit::AuditEntry;
 
@@ -103,10 +104,18 @@ fn summarise_details(action: &str, details: Option<&str>) -> String {
     let Some(details) = details else {
         return String::new();
     };
-    if action == "form_provenance"
-        && let Ok(provenance) = serde_json::from_str::<FormProvenance>(details)
-    {
-        return provenance.summary();
+    if action == "form_provenance" {
+        if let Ok(provenance) = serde_json::from_str::<FfpRecord>(details) {
+            return provenance.summary();
+        }
+        if let Ok(legacy) = serde_json::from_str::<FormProvenanceLegacy>(details) {
+            let rec: FfpRecord = legacy.into();
+            return rec.summary();
+        }
+        // Also try legacy alias via FormProvenance (which is now FfpRecord, but old JSON may still parse via alias fallback)
+        if let Ok(provenance) = serde_json::from_str::<FormProvenance>(details) {
+            return provenance.summary();
+        }
     }
     details.to_string()
 }

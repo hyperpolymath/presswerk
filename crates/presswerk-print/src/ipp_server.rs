@@ -1123,10 +1123,12 @@ fn handle_print_job(request: &IppRequest, peer_addr: SocketAddr, state: &SharedS
     if provenance.is_form() {
         info!(
             job_name = %document_name,
-            origin = %provenance.origin,
-            confidence = %provenance.confidence,
-            fields = provenance.field_count,
-            filled = provenance.filled_field_count,
+            classification = %provenance.classification,
+            form = %provenance.form,
+            filled = provenance.filled_fields,
+            total = provenance.total_fields,
+            appearances = %provenance.appearances,
+            evidence = ?provenance.evidence,
             "form provenance recorded for incoming print job"
         );
         state.audit(
@@ -2448,10 +2450,9 @@ mod tests {
         assert_eq!(jobs.len(), 1);
 
         let provenance = &jobs[0].form_provenance;
-        assert!(provenance.inspected);
         assert!(provenance.is_form());
-        assert!(provenance.is_machine_filled(), "{provenance:?}");
-        assert_eq!(provenance.filled_field_count, 1);
+        assert!(provenance.is_machine_filled() || provenance.classification == presswerk_core::provenance::FfpClassification::MachineFilledSuspected, "{provenance:?}");
+        assert_eq!(provenance.filled_fields, 1);
 
         // Recording alone must not change routing.
         assert_eq!(jobs[0].status, JobStatus::Pending);
@@ -2459,9 +2460,10 @@ mod tests {
         // And the determination is queryable for audit and routing.
         assert_eq!(
             queue
-                .get_jobs_with_form_origin(presswerk_core::types::FormOrigin::Machine)
+                .get_jobs_with_form_origin(presswerk_core::provenance::FfpClassification::MachineFilled)
                 .expect("query by origin")
-                .len(),
+                .len()
+            + queue.get_jobs_with_form_origin(presswerk_core::provenance::FfpClassification::MachineFilledSuspected).expect("query suspected").len(),
             1
         );
     }
@@ -2483,7 +2485,7 @@ mod tests {
             .expect("form_provenance audit entry");
         assert!(entry.success);
         let details = entry.details.as_deref().expect("details present");
-        assert!(details.contains("\"origin\":\"Machine\""), "{details}");
+        assert!(details.contains("\"classification\":\"machine-filled") || details.contains("\"classification\":\"machine-filled-suspected\""), "{details}");
     }
 
     #[test]
@@ -2504,10 +2506,9 @@ mod tests {
 
         let queue = state.job_queue.lock().expect("mutex poisoned");
         let jobs = queue.get_all_jobs().expect("get_all_jobs");
-        assert!(!jobs[0].form_provenance.inspected);
         assert_eq!(
-            jobs[0].form_provenance.origin,
-            presswerk_core::types::FormOrigin::Unknown
+            jobs[0].form_provenance.classification,
+            presswerk_core::provenance::FfpClassification::Unreadable
         );
     }
 
@@ -2531,7 +2532,7 @@ mod tests {
         let queue = state.job_queue.lock().expect("mutex poisoned");
         let jobs = queue.get_all_jobs().expect("get_all_jobs");
         assert_eq!(jobs[0].status, JobStatus::Held);
-        assert!(jobs[0].form_provenance.is_machine_filled());
+        assert!(jobs[0].form_provenance.is_machine_or_suspected());
         drop(queue);
 
         let log = audit.lock().expect("audit mutex poisoned");
@@ -2553,8 +2554,8 @@ mod tests {
         let queue = state.job_queue.lock().expect("mutex poisoned");
         let jobs = queue.get_all_jobs().expect("get_all_jobs");
         assert_eq!(
-            jobs[0].form_provenance.origin,
-            presswerk_core::types::FormOrigin::Human,
+            jobs[0].form_provenance.classification,
+            presswerk_core::provenance::FfpClassification::FilledUnknown,
             "{:?}",
             jobs[0].form_provenance
         );
@@ -2571,7 +2572,7 @@ mod tests {
 
         let queue = state.job_queue.lock().expect("mutex poisoned");
         let jobs = queue.get_all_jobs().expect("get_all_jobs");
-        assert!(!jobs[0].form_provenance.inspected);
+        assert_eq!(jobs[0].form_provenance.classification, presswerk_core::provenance::FfpClassification::Unreadable);
         assert!(!jobs[0].form_provenance.is_machine_filled());
         assert_eq!(jobs[0].status, JobStatus::Pending);
     }

@@ -14,8 +14,9 @@ use std::sync::{Arc, Mutex};
 
 use presswerk_core::AppConfig;
 use presswerk_core::error::{PresswerkError, Result};
+use presswerk_core::provenance::FfpClassification;
 use presswerk_core::types::{
-    DiscoveredPrinter, DocumentType, FormOrigin, JobId, JobSource, JobStatus, PrintJob,
+    DiscoveredPrinter, DocumentType, JobId, JobSource, JobStatus, PrintJob,
     PrintSettings, ServerStatus,
 };
 use presswerk_document::classify_for_print;
@@ -429,7 +430,7 @@ impl AppServices {
     /// (issue #118, ruling D189).
     pub fn machine_filled_jobs(&self) -> Result<Vec<PrintJob>> {
         let queue = acquire_lock(&self.job_queue);
-        queue.get_jobs_with_form_origin(FormOrigin::Machine)
+        queue.get_jobs_with_form_origin(FfpClassification::MachineFilled)
     }
 
     /// Cancel a job.

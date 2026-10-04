@@ -7,8 +7,13 @@
 pub mod config;
 pub mod error;
 pub mod human_errors;
+pub mod provenance;
 pub mod types;
 
 pub use config::AppConfig;
 pub use error::PresswerkError;
+pub use provenance::{
+    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord, FormOrigin,
+    FormProvenance, ProvenanceConfidence,
+};
 pub use types::*;
