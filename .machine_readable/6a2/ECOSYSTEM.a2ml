@@ -8,3 +8,24 @@ ecosystem = "hyperpolymath"
 
 [position]
 type = "component"
+role = "terminal consumer of documents — the print path"
+last-updated = "2026-10-04"
+
+[upstream.blocky-writer]
+relationship = "one step upstream"
+what-they-send = "ordinary PDF byte streams with AcroForm /V, /DV and /AS written and NeedAppearances set"
+what-they-do-not-send = "any marker distinguishing a machine-filled form from a hand-completed one"
+issue = "https://github.com/hyperpolymath/presswerk/issues/118"
+ruling = "D189 (2026-09-30) — record machine-filled provenance as metadata in the print path so audit/routing can distinguish it"
+our-response = "implemented: classify on every print path, persist on the job, write to the audit trail, optional hold-for-review routing"
+our-ask = "write /FillOrigin (machine) and /FillTool (blocky-writer VERSION) into the document /Info dictionary in fill_blocks"
+detail = "docs/ecosystem/FORM-PROVENANCE.adoc"
+
+[position.form-provenance]
+implemented = true
+detection = "crates/presswerk-document/src/pdf/form.rs"
+domain-types = "crates/presswerk-core/src/types.rs (FormOrigin, ProvenanceConfidence, FormProvenance, FormProvenancePolicy)"
+persistence = "jobs.form_origin + jobs.form_provenance, migrated in place"
+audit-actions = "form_provenance, job_held_machine_filled, job_released"
+default-policy = "Record"
+authority = "heuristic unless an explicit marker is present; upstream remains the authoritative source"

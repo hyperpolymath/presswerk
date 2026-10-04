@@ -2,9 +2,13 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
 // Audit page — view the append-only audit trail backed by SQLite.
+//
+// Form-provenance entries (issue #118, ruling D189) carry a JSON determination
+// in `details`; those are rendered as a one-line human summary.
 
 use dioxus::prelude::*;
 
+use presswerk_core::types::FormProvenance;
 use presswerk_security::audit::AuditEntry;
 
 use crate::services::app_services::AppServices;
@@ -61,6 +65,8 @@ pub fn Audit() -> Element {
                             } else {
                                 entry.document_hash.clone()
                             };
+                            let details_text =
+                                summarise_details(&entry.action, entry.details.as_deref());
 
                             rsx! {
                                 div { style: "padding: 10px; margin: 4px 0; border: 1px solid #f0f0f0; border-radius: 6px; font-size: 14px;",
@@ -74,9 +80,9 @@ pub fn Audit() -> Element {
                                     p { style: "color: #888; font-size: 12px; margin: 2px 0 0; font-family: monospace;",
                                         "{hash_short}"
                                     }
-                                    if let Some(ref details) = entry.details {
+                                    if !details_text.is_empty() {
                                         p { style: "color: #666; font-size: 12px; margin: 2px 0 0;",
-                                            "{details}"
+                                            "{details_text}"
                                         }
                                     }
                                 }
@@ -87,4 +93,20 @@ pub fn Audit() -> Element {
             }
         }
     }
+}
+
+/// Render an audit entry's `details` for a human.
+///
+/// Form-provenance entries store a JSON determination; everything else is
+/// already human-readable text.
+fn summarise_details(action: &str, details: Option<&str>) -> String {
+    let Some(details) = details else {
+        return String::new();
+    };
+    if action == "form_provenance"
+        && let Ok(provenance) = serde_json::from_str::<FormProvenance>(details)
+    {
+        return provenance.summary();
+    }
+    details.to_string()
 }

@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use presswerk_core::types::PaperSize;
+use presswerk_core::types::{FormProvenancePolicy, PaperSize};
 
 use crate::services::app_services::AppServices;
 use crate::state::AppState;
@@ -75,6 +75,30 @@ pub fn Settings() -> Element {
                         option { value: "Legal", "Legal" }
                         option { value: "Tabloid", "Tabloid" }
                     }
+                }
+            }
+
+            section { style: "margin: 16px 0;",
+                h3 { "Forms" }
+                p { style: "color: #666; font-size: 13px; margin: 0 0 8px;",
+                    "Presswerk checks whether a PDF form was filled in by a program rather than by a person, and records that in the audit trail."
+                }
+                div { style: "display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0;",
+                    span { "Machine-filled forms" }
+                    select {
+                        style: "padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;",
+                        value: state.read().config.form_provenance_policy.as_token(),
+                        onchange: move |evt| {
+                            let policy = FormProvenancePolicy::from_token(&evt.value());
+                            state.write().config.form_provenance_policy = policy;
+                        },
+                        option { value: "Off", "Do not check" }
+                        option { value: "Record", "Record in audit trail" }
+                        option { value: "HoldForReview", "Record and hold for review" }
+                    }
+                }
+                p { style: "color: #999; font-size: 12px; margin: 8px 0 0;",
+                    "For the print server, the choice applies the next time it starts."
                 }
             }
 

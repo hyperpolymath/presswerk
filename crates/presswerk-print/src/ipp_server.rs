@@ -43,7 +43,11 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use presswerk_core::error::{PresswerkError, Result};
-use presswerk_core::types::{DocumentType, JobId, JobSource, JobStatus, PrintJob, ServerStatus};
+use presswerk_core::types::{
+    DocumentType, FormProvenancePolicy, JobId, JobSource, JobStatus, PrintJob, ServerStatus,
+};
+use presswerk_document::pdf::form;
+use presswerk_security::audit::AuditLog;
 
 use crate::queue::JobQueue;
 
@@ -577,6 +581,34 @@ struct SharedState {
     ipp_to_internal: Arc<Mutex<HashMap<i32, JobId>>>,
     /// Directory for persisting document data files.
     data_dir: PathBuf,
+    /// Audit trail for incoming jobs, when the application supplied one.
+    audit_log: Option<Arc<Mutex<AuditLog>>>,
+    /// How to treat a machine-filled form received over the network
+    /// (issue #118, ruling D189).
+    form_provenance_policy: FormProvenancePolicy,
+}
+
+impl SharedState {
+    /// Record an audit entry for an incoming job, if an audit log is attached.
+    ///
+    /// A failure to write the audit trail must never fail a print job: the job
+    /// is already queued, and refusing it would be a worse outcome than a
+    /// missing log line. It is reported in the log instead.
+    fn audit(&self, action: &str, document_hash: &str, success: bool, details: Option<&str>) {
+        let Some(audit_log) = self.audit_log.as_ref() else {
+            return;
+        };
+        match audit_log.lock() {
+            Ok(log) => {
+                if let Err(e) = log.record(action, document_hash, success, details) {
+                    error!(error = %e, action, "failed to record audit entry for incoming job");
+                }
+            }
+            Err(e) => {
+                error!(error = %e, action, "audit log lock poisoned; entry not recorded");
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -605,6 +637,8 @@ pub struct IppServer {
     mdns_fullname: Option<String>,
     /// Root directory for persistent data (documents subdirectory lives here).
     data_dir: PathBuf,
+    /// How to treat a machine-filled form received over the network.
+    form_provenance_policy: FormProvenancePolicy,
 }
 
 impl IppServer {
@@ -626,7 +660,21 @@ impl IppServer {
             mdns_daemon: None,
             mdns_fullname: None,
             data_dir,
+            form_provenance_policy: FormProvenancePolicy::default(),
         }
+    }
+
+    /// Set how the server should treat a machine-filled form (issue #118).
+    ///
+    /// Takes effect the next time the server is started, because the policy is
+    /// copied into the connection-handling state at start-up.
+    pub fn set_form_provenance_policy(&mut self, policy: FormProvenancePolicy) {
+        self.form_provenance_policy = policy;
+    }
+
+    /// The policy currently configured for machine-filled forms.
+    pub fn form_provenance_policy(&self) -> FormProvenancePolicy {
+        self.form_provenance_policy
     }
 
     /// Return the port this server will bind to (or is bound to).
@@ -680,6 +728,25 @@ impl IppServer {
     /// Returns an error if the port is already in use or the listener cannot
     /// be created.
     pub async fn start(&mut self, job_queue: Arc<Mutex<JobQueue>>) -> Result<()> {
+        self.start_with_audit(job_queue, None).await
+    }
+
+    /// Start the server with an audit log attached.
+    ///
+    /// Identical to [`start`](Self::start), except that incoming print jobs are
+    /// also recorded in the supplied audit trail. This is how a network-received
+    /// machine-filled form becomes visible to audit (issue #118, ruling D189):
+    /// the determination is stored on the job *and* written to the trail.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the port is already in use or the listener cannot
+    /// be created.
+    pub async fn start_with_audit(
+        &mut self,
+        job_queue: Arc<Mutex<JobQueue>>,
+        audit_log: Option<Arc<Mutex<AuditLog>>>,
+    ) -> Result<()> {
         if self.status == ServerStatus::Running {
             debug!(port = self.port, "IPP server already running");
             return Ok(());
@@ -718,6 +785,8 @@ impl IppServer {
             next_ipp_job_id: Arc::new(AtomicU32::new(1)),
             ipp_to_internal: Arc::new(Mutex::new(HashMap::new())),
             data_dir: self.data_dir.clone(),
+            audit_log,
+            form_provenance_policy: self.form_provenance_policy,
         });
 
         let handle = tokio::spawn(async move {
@@ -1033,12 +1102,52 @@ fn handle_print_job(request: &IppRequest, peer_addr: SocketAddr, state: &SharedS
 
     // Create the internal print job.
     let ip = peer_addr.ip();
-    let job = PrintJob::new(
+    let mut job = PrintJob::new(
         JobSource::Network { remote_addr: ip },
         document_type,
         document_name.clone(),
         document_hash.clone(),
     );
+
+    // Classify the document before it is enqueued, so the determination is
+    // part of the stored job rather than an afterthought (issue #118,
+    // ruling D189). Only PDFs are inspected; everything else is recorded as
+    // "not inspected" and prints unchanged.
+    let provenance = form::classify_for_print(
+        &request.document_data,
+        document_type,
+        state.form_provenance_policy,
+    );
+    job.form_provenance = provenance.clone();
+
+    if provenance.is_form() {
+        info!(
+            job_name = %document_name,
+            origin = %provenance.origin,
+            confidence = %provenance.confidence,
+            fields = provenance.field_count,
+            filled = provenance.filled_field_count,
+            "form provenance recorded for incoming print job"
+        );
+        state.audit(
+            "form_provenance",
+            &document_hash,
+            true,
+            Some(&provenance.audit_json()),
+        );
+    }
+
+    // Routing: under the hold policy, a machine-filled form waits for the
+    // user rather than joining the send queue unattended.
+    if provenance.should_hold(state.form_provenance_policy) {
+        job.status = JobStatus::Held;
+        state.audit(
+            "job_held_machine_filled",
+            &document_hash,
+            true,
+            Some("machine-filled form held for review per form provenance policy"),
+        );
+    }
 
     let internal_job_id = job.id;
 
@@ -1134,8 +1243,10 @@ fn handle_print_job(request: &IppRequest, peer_addr: SocketAddr, state: &SharedS
     resp.begin_group(TAG_JOB_ATTRIBUTES)
         .integer("job-id", ipp_job_id)
         .uri("job-uri", &format!("{printer_uri}/jobs/{ipp_job_id}"))
-        .enum_attr("job-state", JOB_STATE_PENDING)
-        .keyword("job-state-reasons", "none");
+        // Report the state the job actually entered: a machine-filled form
+        // held for review must not claim to be pending (issue #118).
+        .enum_attr("job-state", job_status_to_ipp_state(job.status))
+        .keyword("job-state-reasons", job_state_reason(job.status));
 
     resp.build()
 }
@@ -1767,7 +1878,22 @@ mod tests {
             next_ipp_job_id: Arc::new(AtomicU32::new(1)),
             ipp_to_internal: Arc::new(Mutex::new(HashMap::new())),
             data_dir: data_dir.to_path_buf(),
+            audit_log: None,
+            form_provenance_policy: FormProvenancePolicy::default(),
         }
+    }
+
+    /// Shared state with an in-memory audit trail and an explicit provenance
+    /// policy, for testing the print path's audit and routing behaviour.
+    fn make_shared_state_with_audit(
+        data_dir: &std::path::Path,
+        policy: FormProvenancePolicy,
+    ) -> (SharedState, Arc<Mutex<AuditLog>>) {
+        let mut state = make_shared_state_with_dir(data_dir);
+        let audit_log = Arc::new(Mutex::new(AuditLog::open_in_memory().expect("open audit log")));
+        state.audit_log = Some(Arc::clone(&audit_log));
+        state.form_provenance_policy = policy;
+        (state, audit_log)
     }
 
     fn make_shared_state() -> SharedState {
@@ -2206,5 +2332,261 @@ mod tests {
             .retrieve_document(&hash)
             .expect("should retrieve document");
         assert_eq!(retrieved, doc, "retrieved content must match original");
+    }
+
+    // -- Form provenance (issue #118, ruling D189) --------------------------
+
+    /// Build a minimal one-page PDF with a single machine-filled field, shaped
+    /// exactly as blocky-writer's `fill_blocks` leaves it: a value plus a `/DV`
+    /// default, no `/AP` appearance stream, and `/NeedAppearances` set.
+    fn machine_filled_pdf() -> Vec<u8> {
+        build_test_form_pdf(true)
+    }
+
+    /// The same form with an appearance stream on the field and no
+    /// `/NeedAppearances` — what a viewer produces when a person fills it in.
+    fn hand_filled_pdf() -> Vec<u8> {
+        build_test_form_pdf(false)
+    }
+
+    fn build_test_form_pdf(machine_shaped: bool) -> Vec<u8> {
+        use lopdf::{Dictionary, Document, Object, StringFormat};
+
+        let mut document = Document::with_version("1.7");
+
+        let content_id = document.add_object(Object::Stream(lopdf::Stream::new(
+            Dictionary::new(),
+            Vec::new(),
+        )));
+        let mut page = Dictionary::new();
+        page.set("Type", Object::Name(b"Page".to_vec()));
+        page.set(
+            "MediaBox",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(595),
+                Object::Integer(842),
+            ]),
+        );
+        page.set("Contents", Object::Reference(content_id));
+        let page_id = document.add_object(Object::Dictionary(page));
+
+        let mut pages = Dictionary::new();
+        pages.set("Type", Object::Name(b"Pages".to_vec()));
+        pages.set("Kids", Object::Array(vec![Object::Reference(page_id)]));
+        pages.set("Count", Object::Integer(1));
+        let pages_id = document.add_object(Object::Dictionary(pages));
+        if let Ok(Object::Dictionary(page_dict)) = document.get_object_mut(page_id) {
+            page_dict.set("Parent", Object::Reference(pages_id));
+        }
+
+        let mut field = Dictionary::new();
+        field.set(
+            "T",
+            Object::String(b"surname".to_vec(), StringFormat::Literal),
+        );
+        field.set("FT", Object::Name(b"Tx".to_vec()));
+        field.set(
+            "V",
+            Object::String(b"Smith".to_vec(), StringFormat::Literal),
+        );
+        if machine_shaped {
+            field.set(
+                "DV",
+                Object::String(b"Smith".to_vec(), StringFormat::Literal),
+            );
+        } else {
+            let mut appearance = Dictionary::new();
+            appearance.set("N", Object::Null);
+            field.set("AP", Object::Dictionary(appearance));
+        }
+        let field_id = document.add_object(Object::Dictionary(field));
+
+        let mut acroform = Dictionary::new();
+        acroform.set("Fields", Object::Array(vec![Object::Reference(field_id)]));
+        if machine_shaped {
+            acroform.set("NeedAppearances", Object::Boolean(true));
+        }
+
+        let mut catalog = Dictionary::new();
+        catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+        catalog.set("Pages", Object::Reference(pages_id));
+        catalog.set("AcroForm", Object::Dictionary(acroform));
+        let catalog_id = document.add_object(Object::Dictionary(catalog));
+        document.trailer.set("Root", Object::Reference(catalog_id));
+
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("serialise test PDF");
+        bytes
+    }
+
+    /// Submit a PDF as a network print job and return the parsed response.
+    fn submit_pdf(state: &SharedState, document: &[u8], request_id: u32) -> IppRequest {
+        let attrs = vec![
+            (VALUE_TAG_NAME, "job-name", b"Application Form" as &[u8]),
+            (VALUE_TAG_KEYWORD, "document-format", b"application/pdf"),
+        ];
+        let data = build_test_ipp_request(OP_PRINT_JOB, request_id, &attrs, document);
+        let request = parse_ipp_request(&data).expect("parse_ipp_request failed");
+        let peer: SocketAddr = "10.0.0.9:1234".parse().expect("hardcoded address is invalid");
+        let response = dispatch_operation(&request, peer, state);
+        parse_ipp_request(&response).expect("parse_ipp_request failed")
+    }
+
+    #[test]
+    fn network_print_job_records_machine_filled_provenance() {
+        let tmp = make_test_data_dir();
+        let (state, _audit) =
+            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
+
+        let parsed = submit_pdf(&state, &machine_filled_pdf(), 600);
+        assert_eq!(parsed.operation_id, STATUS_OK);
+
+        let queue = state.job_queue.lock().expect("mutex poisoned");
+        let jobs = queue.get_all_jobs().expect("get_all_jobs");
+        assert_eq!(jobs.len(), 1);
+
+        let provenance = &jobs[0].form_provenance;
+        assert!(provenance.inspected);
+        assert!(provenance.is_form());
+        assert!(provenance.is_machine_filled(), "{provenance:?}");
+        assert_eq!(provenance.filled_field_count, 1);
+
+        // Recording alone must not change routing.
+        assert_eq!(jobs[0].status, JobStatus::Pending);
+
+        // And the determination is queryable for audit and routing.
+        assert_eq!(
+            queue
+                .get_jobs_with_form_origin(presswerk_core::types::FormOrigin::Machine)
+                .expect("query by origin")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn network_print_job_writes_form_provenance_to_the_audit_trail() {
+        let tmp = make_test_data_dir();
+        let (state, audit) =
+            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
+
+        let parsed = submit_pdf(&state, &machine_filled_pdf(), 601);
+        assert_eq!(parsed.operation_id, STATUS_OK);
+
+        let log = audit.lock().expect("audit mutex poisoned");
+        let entries = log.recent_entries(10).expect("recent entries");
+        let entry = entries
+            .iter()
+            .find(|e| e.action == "form_provenance")
+            .expect("form_provenance audit entry");
+        assert!(entry.success);
+        let details = entry.details.as_deref().expect("details present");
+        assert!(details.contains("\"origin\":\"Machine\""), "{details}");
+    }
+
+    #[test]
+    fn non_form_documents_are_not_audited_as_forms() {
+        let tmp = make_test_data_dir();
+        let (state, audit) =
+            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
+
+        let parsed = submit_pdf(&state, b"not really a PDF", 602);
+        assert_eq!(parsed.operation_id, STATUS_OK);
+
+        let log = audit.lock().expect("audit mutex poisoned");
+        let entries = log.recent_entries(10).expect("recent entries");
+        assert!(
+            !entries.iter().any(|e| e.action == "form_provenance"),
+            "unparseable documents must not be reported as forms"
+        );
+
+        let queue = state.job_queue.lock().expect("mutex poisoned");
+        let jobs = queue.get_all_jobs().expect("get_all_jobs");
+        assert!(!jobs[0].form_provenance.inspected);
+        assert_eq!(
+            jobs[0].form_provenance.origin,
+            presswerk_core::types::FormOrigin::Unknown
+        );
+    }
+
+    #[test]
+    fn hold_policy_parks_machine_filled_form_for_review() {
+        let tmp = make_test_data_dir();
+        let (state, audit) =
+            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::HoldForReview);
+
+        let parsed = submit_pdf(&state, &machine_filled_pdf(), 603);
+        assert_eq!(parsed.operation_id, STATUS_OK);
+
+        // The client is told the job is held, not pending.
+        let job_group = parsed
+            .attribute_groups
+            .iter()
+            .find(|g| g.delimiter == TAG_JOB_ATTRIBUTES)
+            .expect("job attributes group");
+        assert_eq!(job_group.get_integer("job-state"), Some(JOB_STATE_HELD));
+
+        let queue = state.job_queue.lock().expect("mutex poisoned");
+        let jobs = queue.get_all_jobs().expect("get_all_jobs");
+        assert_eq!(jobs[0].status, JobStatus::Held);
+        assert!(jobs[0].form_provenance.is_machine_filled());
+        drop(queue);
+
+        let log = audit.lock().expect("audit mutex poisoned");
+        let entries = log.recent_entries(10).expect("recent entries");
+        assert!(entries
+            .iter()
+            .any(|e| e.action == "job_held_machine_filled"));
+    }
+
+    #[test]
+    fn hold_policy_leaves_hand_filled_form_alone() {
+        let tmp = make_test_data_dir();
+        let (state, _audit) =
+            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::HoldForReview);
+
+        let parsed = submit_pdf(&state, &hand_filled_pdf(), 604);
+        assert_eq!(parsed.operation_id, STATUS_OK);
+
+        let queue = state.job_queue.lock().expect("mutex poisoned");
+        let jobs = queue.get_all_jobs().expect("get_all_jobs");
+        assert_eq!(
+            jobs[0].form_provenance.origin,
+            presswerk_core::types::FormOrigin::Human,
+            "{:?}",
+            jobs[0].form_provenance
+        );
+        assert_eq!(jobs[0].status, JobStatus::Pending);
+    }
+
+    #[test]
+    fn off_policy_skips_inspection_entirely() {
+        let tmp = make_test_data_dir();
+        let (state, _audit) = make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Off);
+
+        let parsed = submit_pdf(&state, &machine_filled_pdf(), 605);
+        assert_eq!(parsed.operation_id, STATUS_OK);
+
+        let queue = state.job_queue.lock().expect("mutex poisoned");
+        let jobs = queue.get_all_jobs().expect("get_all_jobs");
+        assert!(!jobs[0].form_provenance.inspected);
+        assert!(!jobs[0].form_provenance.is_machine_filled());
+        assert_eq!(jobs[0].status, JobStatus::Pending);
+    }
+
+    #[test]
+    fn server_exposes_its_provenance_policy() {
+        let mut server = IppServer::new(None, None);
+        assert_eq!(
+            server.form_provenance_policy(),
+            FormProvenancePolicy::default()
+        );
+        server.set_form_provenance_policy(FormProvenancePolicy::HoldForReview);
+        assert_eq!(
+            server.form_provenance_policy(),
+            FormProvenancePolicy::HoldForReview
+        );
     }
 }

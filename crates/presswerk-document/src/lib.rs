@@ -13,6 +13,8 @@
 // 2. Visual Enhancement: Binarization and denoising for scanned documents.
 // 3. Format Conversion: Stable conversion between Image and PDF formats.
 // 4. Verified Metadata: Embedding proof-of-authenticity into document headers.
+// 5. Form Provenance: Classifying a form as machine-filled or hand-filled so
+//    the print path can audit and route it (issue #118, ruling D189).
 
 pub mod convert;
 pub mod image;
@@ -21,6 +23,7 @@ pub mod scan;
 
 // CONVENIENCE: Primary interfaces for document transformation.
 pub use image::processor::ImageProcessor;
+pub use pdf::form::{classify_for_print, classify_pdf};
 pub use pdf::reader::PdfReader;
 pub use pdf::writer::PdfWriter;
 pub use scan::enhance::ScanEnhancer;

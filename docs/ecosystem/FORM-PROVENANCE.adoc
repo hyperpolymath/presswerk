@@ -1,0 +1,271 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// Presswerk's position on machine-filled form provenance.
+// Answer to hyperpolymath/presswerk#118, under ruling D189.
+
+= Form Provenance in the Print Path
+Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:revdate: 2026-10-04
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+== Purpose
+
+`blocky-writer` asked (https://github.com/hyperpolymath/presswerk/issues/118[#118]) whether a
+machine-filled application form should be distinguishable from a hand-completed one when it
+arrives as a print job. Ruling *D189* (2026-09-30) answered yes:
+
+____
+Record machine-filled provenance as metadata in the print path so audit/routing can
+distinguish it.
+____
+
+This document records Presswerk's position, the marker convention Presswerk will honour, what
+was implemented, and — importantly — what Presswerk *cannot* determine on its own.
+
+== Position
+
+*Yes, and it is the print path's job to record it.*
+
+A filled application form arriving at a printer is frequently the last observable step in a
+process somebody is accountable for. Presswerk sits at that step, it keeps an append-only audit
+trail, and it routes jobs. So Presswerk records provenance at the point of entry, on every
+print path, whether or not the upstream writer said anything.
+
+Three commitments follow:
+
+[arabic]
+. *Recording is unconditional.* Provenance is determined and stored for every PDF that enters
+the print path — locally selected documents and network-received IPP jobs alike.
+. *Determination is never a guess presented as a fact.* Every determination carries a
+confidence and the evidence for it. A document that could not be inspected is recorded as
+_inspected: false_, not as "hand-filled".
+. *Determination alone never blocks a printout.* Recording changes nothing for the user. Only
+an explicit, opt-in policy holds a job, and only on a *positive* machine determination.
+
+== Where this belongs — and where it does not
+
+This is the right place for the *consuming* half of the problem, and only that half.
+
+[cols="1,3", options="header"]
+|===
+|Place |What it can and cannot do
+
+|`blocky-writer` (upstream)
+|The only place that *knows* it filled the form. It can emit a marker that costs nothing to
+verify and needs no inference. It currently emits none, so everything downstream of it is
+inference.
+
+|*Presswerk print path (this repository)*
+|The place that must *record* the fact for audit and act on it for routing, because it is the
+last component that sees the document as a document. Implemented here.
+
+|The printer
+|Sees pixels. A rendered page carries no provenance at all; by the time the marker could
+matter, the document is gone.
+
+|The Idris2 ABI layer (`src/abi/`)
+|Proves properties of the FFI surface. `FormProvenance` is not exposed over FFI, so there is
+nothing to prove there yet. If it is ever exported, its encoding becomes a proof obligation.
+|===
+
+So: Presswerk is the right place for recording, audit and routing. It is *not* the only place
+the problem should be solved, and it is not the authoritative place. The authoritative marker
+has to come from upstream. Until it does, Presswerk's determination is inference, and this
+document says so out loud rather than letting a heuristic masquerade as knowledge.
+
+== Marker convention Presswerk will honour
+
+If an upstream writer states provenance explicitly, Presswerk prefers that statement over
+every structural signal. Either of these is sufficient; both together is better.
+
+=== Structured (preferred)
+
+Entries in the PDF document information dictionary (`/Info`). Presswerk reads these through
+the parsed object tree, so they work whether or not the dictionary sits in an object stream.
+
+[cols="1,3", options="header"]
+|===
+|Key |Meaning
+
+|`/FillOrigin`
+|Required to trigger the explicit path. Recognised values contain `machine`, `software` or
+`automatic` (case-insensitive). Any other value — including `human` — is ignored, so a
+writer can declare hand-completion without tripping the marker.
+
+|`/FillTool`
+|Optional. Name and version of the tool that wrote the values, e.g. `blocky-writer 0.4.2`.
+Shown in the UI and stored in the audit trail.
+
+|`/FillTime`
+|Optional. When the values were written, RFC 3339 preferred.
+|===
+
+=== Unstructured (fallback)
+
+A `fillOrigin` attribute or element in the document's XMP packet, or anywhere in the raw byte
+stream. All three of these are understood:
+
+[source,xml]
+----
+bw:fillOrigin="machine"
+bw:fillOrigin='machine'
+<bw:fillOrigin>machine</bw:fillOrigin>
+----
+
+Two caveats, stated plainly: only *uncompressed* XMP packets are scanned (Presswerk does not
+decode a compressed metadata stream), and a raw byte scan can in principle match text inside a
+document's visible content. That is why the structured form is preferred and why an
+unstructured match is the only signal Presswerk will accept from raw bytes.
+
+== How Presswerk determines provenance
+
+Implemented in `crates/presswerk-document/src/pdf/form.rs`.
+
+[cols="2,1,4", options="header"]
+|===
+|Signal |Confidence |Rationale
+
+|Explicit marker present |`Explicit`
+|The writer said so. Outranks every structural signal, including an apparently empty form.
+
+|`/Producer` or `/Creator` names a known form-filling tool |`Strong`
+|`blocky-writer`, `lopdf`, `iText`, `OpenPDF`, `pdf-lib`, `pypdf`, `PDFtk`, `PDFBox`,
+`Aspose`, `PDFsharp`, `DocuSign`, `LiveCycle`. Only tools that *fill* forms are listed: a
+blank template from a general PDF generator is still an empty form, not a machine-filled one.
+
+|Values present and `/NeedAppearances` set |`Probable`
+|The classic programmatic signature: values were written and the viewer was told to rebuild
+appearances. A person filling a form in a viewer gets appearance streams instead.
+
+|Values present with no `/AP` in the field's subtree |`Probable`
+|Same signature, read structurally. Widget annotations are searched as well as the field
+dictionary, because the value and its appearance often live apart.
+
+|Values present alongside `/DV` defaults |`Speculative`
+|Interactive viewers write `/V` only. Rewriting `/DV` too is a programmatic habit — this is
+what `fill_blocks` does — but it is weak on its own.
+
+|Values present, appearance streams present, no signal above |`Probable` (human)
+|What a viewer produces when a person completes a form.
+
+|`/AcroForm` present, no field carries a value |`Strong` (empty)
+|`/Off` on a check box or radio button counts as no value.
+
+|No `/AcroForm` |`Strong` (not a form)
+|Nothing to say.
+|===
+
+Guards: documents over 8 MiB are not inspected; the field-tree walk is bounded at 100,000
+nodes and depth 32; every parse failure is recorded as "not inspected" with the reason.
+
+== What was implemented
+
+[cols="1,3", options="header"]
+|===
+|Change |Where
+
+|`FormOrigin`, `ProvenanceConfidence`, `FormProvenance`, `FormProvenancePolicy`
+|`crates/presswerk-core/src/types.rs`
+
+|`AppConfig::form_provenance_policy`, defaulting to `Record`
+|`crates/presswerk-core/src/config.rs`
+
+|Detector: `classify_for_print`, `classify_pdf`, `classify_document`
+|`crates/presswerk-document/src/pdf/form.rs`
+
+|`form_origin` and `form_provenance` columns on the job queue, with migration for existing
+databases, plus `get_jobs_with_form_origin`
+|`crates/presswerk-print/src/queue.rs`
+
+|Network print path: classify on receipt, store on the job, write to the audit trail, hold
+under the hold policy, report `job-state` as held rather than pending
+|`crates/presswerk-print/src/ipp_server.rs`
+
+|Local print path: classify, store, audit, hold, and `release_job` to send a held job
+|`crates/presswerk-app/src/services/app_services.rs`
+
+|Provenance badge on the jobs page, a `Release` action for held jobs, a plain-language
+summary in the audit trail, and a policy selector in Settings
+|`crates/presswerk-app/src/pages/`
+|===
+
+`presswerk-print` now depends on `presswerk-document`. This is a deliberate change to the
+documented crate graph: the network print path must classify documents itself, because a job
+received over IPP never passes through the application layer. There is no cycle
+(`presswerk-document` depends only on `presswerk-core`).
+
+=== Audit trail entries
+
+[cols="1,3", options="header"]
+|===
+|Action |When
+
+|`form_provenance` |The document is an interactive form. `details` holds the full
+determination as JSON, which the UI renders as a one-line summary.
+
+|`job_held_machine_filled` |The hold policy parked the job.
+
+|`job_released` |The user released a held job for printing.
+|===
+
+Documents that are not forms, and documents that could not be inspected, produce no
+`form_provenance` entry: the trail stays about things that happened.
+
+=== Routing policy
+
+[cols="1,3", options="header"]
+|===
+|Policy |Behaviour
+
+|`Off` |Do not inspect. Nothing is recorded.
+
+|`Record` *(default)* |Inspect, store on the job, write to the audit trail. Routing unchanged.
+
+|`HoldForReview` |As `Record`, plus a job with a positive `Machine` determination is stored
+with status `Held` instead of being sent. The user releases it from the jobs page.
+|===
+
+For the embedded IPP server the policy is copied into the connection state at start-up, so a
+change in Settings takes effect the next time the server starts. This is stated in the UI.
+
+== Known limitations
+
+Recorded here rather than left to be discovered.
+
+[arabic]
+. *Without an upstream marker this is inference.* A tool that fills a form and then generates
+appearance streams for every field, sets no `/NeedAppearances`, and rewrites no `/DV`, is
+indistinguishable from a person using a viewer. Presswerk will call it `Human` with
+`Probable` confidence. Only a marker fixes this — see the convention above.
+. *A marker is a claim, not a proof.* `/FillOrigin` can be written by anyone who can write a
+PDF. It raises confidence to `Explicit`; it does not authenticate the writer. Signing that
+claim is a separate problem (and a good candidate for `blocky-writer`, which already holds the
+key material context).
+. *Held documents are stored in plaintext.* `release_job` needs the bytes later, so a held
+job's document is written to the data directory. Network-received documents were already
+persisted this way. Encrypting the document store is a separate, larger piece of work
+(`presswerk-security` has the primitives) and is not done here.
+. *Compressed XMP packets are not decoded.* Use the structured `/Info` marker.
+. *Only PDFs are inspected.* A filled form that arrives as a scan or an image has no field
+structure left to read, and is recorded as "not inspected".
+
+== Ask of upstream
+
+To `blocky-writer`: write `/FillOrigin (machine)` and `/FillTool (blocky-writer <version>)`
+into the document information dictionary in `fill_blocks`. Two dictionary entries, no change
+to `/V`, `/DV` or `/AS`, no re-render, no re-compression. That single change turns every
+downstream determination from `Probable` into `Explicit`, for Presswerk and for anyone else
+who adopts the same convention.
+
+== References
+
+* https://github.com/hyperpolymath/presswerk/issues/118[presswerk#118] — the question
+* https://github.com/hyperpolymath/standards/issues/787#issuecomment-5913118060[standards#787]
+— ruling D189
+* https://github.com/hyperpolymath/blocky-writer/pull/73[blocky-writer#73] — the writer that
+prompted it
+* ISO 32000-1 §12.7 (interactive forms), §12.7.4 (field values), §14.3 (metadata)
