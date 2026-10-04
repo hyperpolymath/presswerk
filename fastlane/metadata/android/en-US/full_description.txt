@@ -1,7 +1,7 @@
 Presswerk (Print Doctor) is a local-first print router. It discovers IPP printers via mDNS, lets you print PDFs and images from your device, and records a complete audit trail — all without a cloud account.
 
 • No analytics, no ads, no sign-in. Files stay on-device.
-• Form-fill provenance (FFP): machine-filled forms are distinguished from hand-filled ones and surfaced before printing, so blank print hazards are caught.
+• Form-fill provenance (FFP): machine-filled forms are distinguished from hand-filled ones and shown on the Advanced Jobs page; blank-print hazards are flagged there.
 • Works offline on your local network.
 
 Privacy: https://hyperpolymath.dev/presswerk/privacy
