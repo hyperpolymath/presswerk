@@ -430,7 +430,10 @@ impl AppServices {
     /// (issue #118, ruling D189).
     pub fn machine_filled_jobs(&self) -> Result<Vec<PrintJob>> {
         let queue = acquire_lock(&self.job_queue);
-        queue.get_jobs_with_form_origin(FfpClassification::MachineFilled)
+        let mut jobs = queue.get_jobs_with_form_origin(FfpClassification::MachineFilled)?;
+        jobs.extend(queue.get_jobs_with_form_origin(FfpClassification::MachineFilledSuspected)?);
+        jobs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(jobs)
     }
 
     /// Cancel a job.
