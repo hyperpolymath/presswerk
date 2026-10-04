@@ -8,6 +8,7 @@ use std::path::Path;
 
 use lopdf::{Document, Object, ObjectId};
 use presswerk_core::error::PresswerkError;
+use presswerk_core::types::FormProvenance;
 use tracing::{debug, info, instrument, warn};
 
 /// Reads and manipulates existing PDF files.
@@ -67,6 +68,18 @@ impl PdfReader {
     /// Return the source path if the reader was created via [`PdfReader::open`].
     pub fn source_path(&self) -> Option<&str> {
         self.source_path.as_deref()
+    }
+
+    /// Classify whether this document's form values were written by software
+    /// or by a person (issue #118, ruling D189).
+    ///
+    /// Note: only *structured* provenance markers (the `Fill*` entries in the
+    /// document information dictionary) are consulted here, because the
+    /// original byte stream is not retained once the document is parsed.
+    /// [`crate::pdf::form::classify_pdf`] additionally scans the raw bytes and
+    /// any uncompressed XMP packet, and is what the print path uses.
+    pub fn form_provenance(&self) -> FormProvenance {
+        super::form::classify_document(&self.document, &[])
     }
 
     // -- Extraction -----------------------------------------------------------

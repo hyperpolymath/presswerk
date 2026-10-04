@@ -12,6 +12,8 @@ repository.workspace = true
 [dependencies]
 presswerk-core = { workspace = true }
 presswerk-security = { workspace = true }
+# Form provenance classification on the network print path (issue #118).
+presswerk-document = { workspace = true }
 ipp = { workspace = true }
 mdns-sd = { workspace = true }
 rusqlite = { workspace = true }
@@ -28,6 +30,7 @@ hex = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 criterion = { workspace = true }
+lopdf = { workspace = true }
 
 [[bench]]
 name = "ipp_bench"

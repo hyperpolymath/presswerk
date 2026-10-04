@@ -21,6 +21,7 @@ toc::[]
 * **Retry Engine** — Exponential backoff with jitter, circuit breaker, network self-healing
 * **Universal Connectivity** — USB, Bluetooth, Wi-Fi Direct, NFC, Serial, Parallel, FireWire, Thunderbolt, and more
 * **Document Processing** — PDF read/merge/split/rotate/crop, image resize/enhance, text-to-PDF, format auto-conversion
+* **Form Provenance** — every PDF is classified as machine-filled or hand-completed, recorded on the job and in the audit trail, with optional hold-for-review routing
 * **Document Scanning** — Camera capture with edge detection, perspective correction, binarisation, OCR
 * **Print Server Mode** — Phone advertises itself as a network printer; other LAN devices can print to it
 * **Encrypted Storage** — age (X25519) encryption at rest for all local data
@@ -65,7 +66,7 @@ presswerk-security     (→ core; age, ring, rustls, rusqlite)
     ↑
 presswerk-document     (→ core; lopdf, printpdf, image, imageproc, ocrs)
     ↑
-presswerk-print        (→ core, security; ipp, mdns-sd, tokio)
+presswerk-print        (→ core, security, document; ipp, mdns-sd, tokio)
     ↑
 presswerk-bridge       (→ core; objc2 [iOS], jni [Android])
     ↑

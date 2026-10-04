@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Jobs page — view all print jobs, their status, cancel/retry, and delete.
+// Jobs page — view all print jobs, their status, cancel/retry, release, and
+// delete.  Jobs whose document was classified as a machine-filled form carry a
+// provenance badge (issue #118, ruling D189).
 
 use dioxus::prelude::*;
 
@@ -58,7 +60,10 @@ pub fn Jobs() -> Element {
                         let job_status = job.status;
                         let ts = job.created_at.format("%Y-%m-%d %H:%M").to_string();
                         let can_cancel = matches!(job_status, JobStatus::Pending | JobStatus::Held);
+                        let can_release = matches!(job_status, JobStatus::Held);
                         let is_terminal = matches!(job_status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled);
+                        let provenance_note = job.form_provenance.summary();
+                        let machine_filled = job.form_provenance.is_machine_filled();
 
                         rsx! {
                             div { style: "padding: 12px; margin: 8px 0; border: 1px solid #e0e0e0; border-radius: 8px;",
@@ -69,6 +74,11 @@ pub fn Jobs() -> Element {
                                     }
                                 }
                                 p { style: "color: #666; font-size: 14px; margin: 4px 0;", "{ts}" }
+                                if machine_filled {
+                                    p { style: "color: #8a5300; font-size: 12px; margin: 4px 0; background: #fff4e5; border: 1px solid #ffd8a8; border-radius: 4px; padding: 2px 6px;",
+                                        "Machine-filled: {provenance_note}"
+                                    }
+                                }
                                 if let Some(ref uri) = job.printer_uri {
                                     p { style: "color: #999; font-size: 12px;", "{uri}" }
                                 }
@@ -92,6 +102,26 @@ pub fn Jobs() -> Element {
                                                 }
                                             },
                                             "Cancel"
+                                        }
+                                    }
+                                    if can_release {
+                                        button {
+                                            style: "padding: 4px 12px; border-radius: 4px; border: 1px solid #007aff; color: #007aff; background: white; font-size: 12px;",
+                                            onclick: {
+                                                let svc = svc.clone();
+                                                move |_| {
+                                                    let svc = svc.clone();
+                                                    spawn(async move {
+                                                        if let Err(e) = svc.release_job(&job_id).await {
+                                                            tracing::error!(error = %e, "release failed");
+                                                        }
+                                                        if let Ok(jobs) = svc.all_jobs() {
+                                                            state.write().jobs = jobs;
+                                                        }
+                                                    });
+                                                }
+                                            },
+                                            "Release"
                                         }
                                     }
                                     if is_terminal {

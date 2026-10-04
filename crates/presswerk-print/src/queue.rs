@@ -14,7 +14,8 @@ use tracing::{debug, info, instrument};
 
 use presswerk_core::error::{PresswerkError, Result};
 use presswerk_core::types::{
-    DocumentType, ErrorClass, JobId, JobSource, JobStatus, PrintJob, PrintSettings,
+    DocumentType, ErrorClass, FormOrigin, FormProvenance, JobId, JobSource, JobStatus, PrintJob,
+    PrintSettings,
 };
 
 /// SQLite schema for the jobs table.
@@ -36,7 +37,9 @@ const CREATE_TABLE_SQL: &str = r#"
         error_class TEXT,
         error_history TEXT NOT NULL DEFAULT '[]',
         bytes_sent INTEGER NOT NULL DEFAULT 0,
-        total_bytes INTEGER NOT NULL DEFAULT 0
+        total_bytes INTEGER NOT NULL DEFAULT 0,
+        form_origin TEXT NOT NULL DEFAULT 'Unknown',
+        form_provenance TEXT NOT NULL DEFAULT '{}'
     )
 "#;
 
@@ -48,6 +51,18 @@ const MIGRATE_RETRY_COLUMNS_SQL: &str = r#"
     ALTER TABLE jobs ADD COLUMN error_history TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE jobs ADD COLUMN bytes_sent INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE jobs ADD COLUMN total_bytes INTEGER NOT NULL DEFAULT 0;
+"#;
+
+/// Migration to add form-provenance columns to existing databases.
+///
+/// `form_origin` holds the bare token (`Machine`, `Human`, `Empty`,
+/// `NotAForm`, `Unknown`) so routing and audit queries can filter in SQL
+/// without parsing JSON; `form_provenance` holds the full determination.
+/// The `'{}'` default deliberately does not parse into a `FormProvenance`,
+/// so pre-existing rows surface as "not inspected" rather than as a guess.
+const MIGRATE_FORM_PROVENANCE_SQL: &str = r#"
+    ALTER TABLE jobs ADD COLUMN form_origin TEXT NOT NULL DEFAULT 'Unknown';
+    ALTER TABLE jobs ADD COLUMN form_provenance TEXT NOT NULL DEFAULT '{}';
 "#;
 
 /// Persistent job queue backed by a SQLite database.
@@ -79,6 +94,9 @@ impl JobQueue {
 
         // Run migration for existing databases that lack retry columns.
         Self::migrate_retry_columns(&conn);
+
+        // Run migration for existing databases that lack provenance columns.
+        Self::migrate_form_provenance_columns(&conn);
 
         info!("job queue database opened");
         Ok(Self { conn })
@@ -112,6 +130,20 @@ impl JobQueue {
         }
     }
 
+    /// Apply form-provenance column migration to existing databases.
+    /// Silently skips if columns already exist.
+    fn migrate_form_provenance_columns(conn: &Connection) {
+        for stmt in MIGRATE_FORM_PROVENANCE_SQL.split(';') {
+            let trimmed = stmt.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if conn.execute_batch(trimmed).is_err() {
+                // Column already exists — expected on migrated databases.
+            }
+        }
+    }
+
     /// Insert a new print job into the queue.
     ///
     /// The job's `id`, `created_at`, and `updated_at` fields must already be
@@ -133,13 +165,17 @@ impl JobQueue {
             .map(|ec| serde_json::to_string(ec).unwrap_or_default());
         let error_history_json = serde_json::to_string(&job.error_history)
             .map_err(|e| PresswerkError::Database(format!("serialize error_history: {e}")))?;
+        let form_provenance_json = job.form_provenance.audit_json();
+        let form_origin = job.form_provenance.origin.as_token();
 
         self.conn
             .execute(
                 "INSERT INTO jobs (id, source, status, document_type, document_name,
                  document_hash, settings, printer_uri, created_at, updated_at, error_message,
-                 retry_count, max_retries, error_class, error_history, bytes_sent, total_bytes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                 retry_count, max_retries, error_class, error_history, bytes_sent, total_bytes,
+                 form_origin, form_provenance)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                 ?18, ?19)",
                 params![
                     job.id.to_string(),
                     source_json,
@@ -158,6 +194,8 @@ impl JobQueue {
                     error_history_json,
                     job.bytes_sent as i64,
                     job.total_bytes as i64,
+                    form_origin,
+                    form_provenance_json,
                 ],
             )
             .map_err(|e| PresswerkError::Database(format!("insert job: {e}")))?;
@@ -208,7 +246,8 @@ impl JobQueue {
                 "SELECT id, source, status, document_type, document_name,
                         document_hash, settings, printer_uri, created_at,
                         updated_at, error_message, retry_count, max_retries,
-                        error_class, error_history, bytes_sent, total_bytes
+                        error_class, error_history, bytes_sent, total_bytes,
+                        form_origin, form_provenance
                  FROM jobs WHERE id = ?1",
             )
             .map_err(|e| PresswerkError::Database(format!("prepare get_job: {e}")))?;
@@ -233,7 +272,8 @@ impl JobQueue {
                 "SELECT id, source, status, document_type, document_name,
                         document_hash, settings, printer_uri, created_at,
                         updated_at, error_message, retry_count, max_retries,
-                        error_class, error_history, bytes_sent, total_bytes
+                        error_class, error_history, bytes_sent, total_bytes,
+                        form_origin, form_provenance
                  FROM jobs ORDER BY created_at DESC",
             )
             .map_err(|e| PresswerkError::Database(format!("prepare get_all_jobs: {e}")))?;
@@ -261,7 +301,8 @@ impl JobQueue {
                 "SELECT id, source, status, document_type, document_name,
                         document_hash, settings, printer_uri, created_at,
                         updated_at, error_message, retry_count, max_retries,
-                        error_class, error_history, bytes_sent, total_bytes
+                        error_class, error_history, bytes_sent, total_bytes,
+                        form_origin, form_provenance
                  FROM jobs WHERE status = ?1 ORDER BY created_at ASC",
             )
             .map_err(|e| PresswerkError::Database(format!("prepare get_pending: {e}")))?;
@@ -273,6 +314,37 @@ impl JobQueue {
             .map_err(|e| PresswerkError::Database(format!("collect rows: {e}")))?;
 
         debug!(count = jobs.len(), "retrieved pending jobs");
+        Ok(jobs)
+    }
+
+    /// Retrieve every job whose document was classified with the given form
+    /// provenance, newest first.
+    ///
+    /// This is the query audit and routing use to answer "which of these print
+    /// jobs were machine-filled forms?" (issue #118, ruling D189). Filtering
+    /// happens on the `form_origin` token column, so it never has to parse the
+    /// JSON determination.
+    #[instrument(skip(self), fields(origin = %origin))]
+    pub fn get_jobs_with_form_origin(&self, origin: FormOrigin) -> Result<Vec<PrintJob>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, source, status, document_type, document_name,
+                        document_hash, settings, printer_uri, created_at,
+                        updated_at, error_message, retry_count, max_retries,
+                        error_class, error_history, bytes_sent, total_bytes,
+                        form_origin, form_provenance
+                 FROM jobs WHERE form_origin = ?1 ORDER BY created_at DESC",
+            )
+            .map_err(|e| PresswerkError::Database(format!("prepare get_by_origin: {e}")))?;
+
+        let jobs = stmt
+            .query_map(params![origin.as_token()], row_to_print_job)
+            .map_err(|e| PresswerkError::Database(format!("query get_by_origin: {e}")))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| PresswerkError::Database(format!("collect rows: {e}")))?;
+
+        debug!(count = jobs.len(), origin = %origin, "retrieved jobs by form origin");
         Ok(jobs)
     }
 
@@ -318,6 +390,22 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
     let error_history_json: String = row.get::<_, String>(14).unwrap_or_else(|_| "[]".into());
     let bytes_sent: u64 = row.get::<_, i64>(15).unwrap_or(0) as u64;
     let total_bytes: u64 = row.get::<_, i64>(16).unwrap_or(0) as u64;
+    // Columns 17 and 18 were added by migration. On a pre-migration row they
+    // are absent; on a row written before provenance existed they carry the
+    // schema default (`'Unknown'` / `'{}'`), and `'{}'` does not parse into a
+    // `FormProvenance`. Every one of those cases must surface as "not
+    // inspected" — never as a guessed determination.
+    let form_origin_token: Option<String> = row.get(17).unwrap_or(None);
+    let form_provenance_json: Option<String> = row.get(18).unwrap_or(None);
+    let form_provenance: FormProvenance = form_provenance_json
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_else(|| FormProvenance {
+            origin: form_origin_token
+                .as_deref()
+                .map(FormOrigin::from_token)
+                .unwrap_or_default(),
+            ..FormProvenance::default()
+        });
 
     // Parse the UUID.  If the stored value is malformed we surface a
     // meaningful error rather than panicking.
@@ -376,6 +464,7 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
         error_history,
         bytes_sent,
         total_bytes,
+        form_provenance,
     })
 }
 
@@ -497,5 +586,168 @@ mod tests {
         let queue = JobQueue::open_in_memory().expect("open in-memory db");
         let result = queue.update_status(&JobId::new(), JobStatus::Cancelled, None);
         assert!(result.is_err());
+    }
+
+    // -- Form provenance (issue #118, ruling D189) --------------------------
+
+    /// A machine-filled determination, as the document crate would produce it.
+    fn machine_filled_job() -> PrintJob {
+        let mut job = test_job();
+        job.form_provenance = FormProvenance {
+            origin: FormOrigin::Machine,
+            confidence: presswerk_core::types::ProvenanceConfidence::Probable,
+            inspected: true,
+            is_form: true,
+            field_count: 14,
+            filled_field_count: 12,
+            values_without_appearance: 12,
+            filled_with_default: 12,
+            need_appearances: true,
+            producer: Some("blocky-writer 0.4.2".to_string()),
+            creator: None,
+            marker: None,
+            evidence: vec!["12 of 14 fields carry values".to_string()],
+        };
+        job
+    }
+
+    #[test]
+    fn provenance_roundtrips_through_the_queue() {
+        let queue = JobQueue::open_in_memory().expect("open in-memory db");
+        let job = machine_filled_job();
+        queue.insert_job(&job).expect("insert");
+
+        let retrieved = queue.get_job(&job.id).expect("get_job").expect("found");
+        assert_eq!(retrieved.form_provenance, job.form_provenance);
+        assert!(retrieved.form_provenance.is_machine_filled());
+        assert_eq!(
+            retrieved.form_provenance.producer.as_deref(),
+            Some("blocky-writer 0.4.2")
+        );
+    }
+
+    #[test]
+    fn jobs_can_be_filtered_by_form_origin() {
+        let queue = JobQueue::open_in_memory().expect("open in-memory db");
+
+        let machine = machine_filled_job();
+        let plain = test_job();
+        queue.insert_job(&machine).expect("insert machine");
+        queue.insert_job(&plain).expect("insert plain");
+
+        let machine_jobs = queue
+            .get_jobs_with_form_origin(FormOrigin::Machine)
+            .expect("query machine");
+        assert_eq!(machine_jobs.len(), 1);
+        assert_eq!(machine_jobs[0].id, machine.id);
+
+        let unknown_jobs = queue
+            .get_jobs_with_form_origin(FormOrigin::Unknown)
+            .expect("query unknown");
+        assert_eq!(unknown_jobs.len(), 1);
+        assert_eq!(unknown_jobs[0].id, plain.id);
+
+        assert!(queue
+            .get_jobs_with_form_origin(FormOrigin::Human)
+            .expect("query human")
+            .is_empty());
+    }
+
+    #[test]
+    fn every_read_path_returns_the_stored_provenance() {
+        let queue = JobQueue::open_in_memory().expect("open in-memory db");
+        let job = machine_filled_job();
+        queue.insert_job(&job).expect("insert");
+
+        assert!(queue.get_all_jobs().expect("get_all")[0]
+            .form_provenance
+            .is_machine_filled());
+        assert!(queue.get_pending_jobs().expect("get_pending")[0]
+            .form_provenance
+            .is_machine_filled());
+    }
+
+    /// The `jobs` table as it stood before form provenance existed.
+    const LEGACY_SCHEMA: &str = r#"
+        CREATE TABLE jobs (
+            id TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            document_type TEXT NOT NULL,
+            document_name TEXT NOT NULL,
+            document_hash TEXT NOT NULL,
+            settings TEXT NOT NULL,
+            printer_uri TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            error_message TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            max_retries INTEGER NOT NULL DEFAULT 5,
+            error_class TEXT,
+            error_history TEXT NOT NULL DEFAULT '[]',
+            bytes_sent INTEGER NOT NULL DEFAULT 0,
+            total_bytes INTEGER NOT NULL DEFAULT 0
+        );
+    "#;
+
+    #[test]
+    fn legacy_database_is_migrated_and_reads_as_uninspected() {
+        let dir = tempfile::TempDir::new().expect("create temp dir");
+        let path = dir.path().join("legacy-jobs.db");
+
+        // Write a row using the pre-provenance schema.
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open legacy db");
+            conn.execute_batch(LEGACY_SCHEMA).expect("create legacy table");
+            let now = Utc::now().to_rfc3339();
+            conn.execute(
+                "INSERT INTO jobs (id, source, status, document_type, document_name,
+                 document_hash, settings, printer_uri, created_at, updated_at, error_message,
+                 retry_count, max_retries, error_class, error_history, bytes_sent, total_bytes)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                params![
+                    "11111111-1111-1111-1111-111111111111",
+                    "\"Local\"",
+                    "\"Pending\"",
+                    "\"Pdf\"",
+                    "legacy-form.pdf",
+                    "legacyhash",
+                    serde_json::to_string(&PrintSettings::default()).unwrap(),
+                    Option::<String>::None,
+                    now,
+                    now,
+                    Option::<String>::None,
+                    0,
+                    5,
+                    Option::<String>::None,
+                    "[]",
+                    0,
+                    0,
+                ],
+            )
+            .expect("insert legacy row");
+        }
+
+        // Reopening must migrate the schema without losing the row.
+        let queue = JobQueue::open(&path).expect("open migrated db");
+        let jobs = queue.get_all_jobs().expect("get_all_jobs");
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].document_name, "legacy-form.pdf");
+
+        // A row with no provenance must read back as "not inspected", never as
+        // a guessed determination.
+        let provenance = &jobs[0].form_provenance;
+        assert!(!provenance.inspected);
+        assert_eq!(provenance.origin, FormOrigin::Unknown);
+        assert!(!provenance.is_machine_filled());
+
+        // And new jobs written after migration carry their determination.
+        let fresh = machine_filled_job();
+        queue.insert_job(&fresh).expect("insert post-migration job");
+        let machine_jobs = queue
+            .get_jobs_with_form_origin(FormOrigin::Machine)
+            .expect("query machine");
+        assert_eq!(machine_jobs.len(), 1);
+        assert_eq!(machine_jobs[0].id, fresh.id);
     }
 }

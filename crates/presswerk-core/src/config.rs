@@ -28,6 +28,17 @@ pub struct AppConfig {
     pub query_timeout_secs: u64,
     /// Whether Easy Mode is the default interface.
     pub easy_mode: bool,
+    /// How the print path treats a machine-filled form (issue #118).
+    ///
+    /// Defaults to `Record`: every PDF that arrives for printing is inspected,
+    /// the determination is stored on the job and written to the audit trail,
+    /// and nothing is held. `HoldForReview` additionally parks machine-filled
+    /// jobs in `Held` until the user releases them.
+    ///
+    /// `#[serde(default)]` keeps configuration files written before this
+    /// setting existed loadable rather than silently resetting every setting.
+    #[serde(default)]
+    pub form_provenance_policy: crate::FormProvenancePolicy,
 }
 
 impl Default for AppConfig {
@@ -43,6 +54,7 @@ impl Default for AppConfig {
             print_timeout_secs: 60,
             query_timeout_secs: 15,
             easy_mode: true,
+            form_provenance_policy: crate::FormProvenancePolicy::Record,
         }
     }
 }
@@ -109,5 +121,56 @@ mod tests {
         let config = AppConfig::default();
         // Print timeout should generally be >= query timeout
         assert!(config.print_timeout_secs >= config.query_timeout_secs);
+    }
+
+    #[test]
+    fn test_form_provenance_policy_defaults_to_record() {
+        let config = AppConfig::default();
+        assert_eq!(
+            config.form_provenance_policy,
+            crate::FormProvenancePolicy::Record
+        );
+        // Recording is on by default: the ruling is to record provenance.
+        assert!(config.form_provenance_policy.inspects());
+    }
+
+    #[test]
+    fn test_config_without_form_provenance_still_loads() {
+        // A config file written by an older Presswerk has no such key.
+        // It must still deserialise rather than resetting every setting.
+        let legacy = r#"{
+            "default_paper_size": "A4",
+            "auto_start_server": true,
+            "server_port": 9631,
+            "server_require_tls": false,
+            "auto_accept_network_jobs": false,
+            "audit_enabled": true,
+            "encryption_enabled": true,
+            "print_timeout_secs": 60,
+            "query_timeout_secs": 15,
+            "easy_mode": true
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(legacy).expect("legacy config must load");
+        assert_eq!(config.server_port, 9631);
+        assert!(config.auto_start_server);
+        assert_eq!(
+            config.form_provenance_policy,
+            crate::FormProvenancePolicy::Record
+        );
+    }
+
+    #[test]
+    fn test_form_provenance_policy_survives_roundtrip() {
+        let config = AppConfig {
+            form_provenance_policy: crate::FormProvenancePolicy::HoldForReview,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&config).expect("serialize");
+        let restored: AppConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(
+            restored.form_provenance_policy,
+            crate::FormProvenancePolicy::HoldForReview
+        );
     }
 }

@@ -33,7 +33,7 @@ All Rust source code lives in the `crates/` workspace directory. The six crates 
 - `presswerk-core` — Shared types, errors, config (no internal deps)
 - `presswerk-security` — Encrypted storage, audit trail, TLS certs (depends: core)
 - `presswerk-document` — PDF ops, image processing, scanning, OCR (depends: core)
-- `presswerk-print` — IPP client/server, mDNS discovery, job queue (depends: core, security)
+- `presswerk-print` — IPP client/server, mDNS discovery, job queue (depends: core, security, document)
 - `presswerk-bridge` — iOS (objc2) + Android (JNI) native bridges (depends: core)
 - `presswerk-app` — Dioxus UI with 10 pages (depends: all above)
 

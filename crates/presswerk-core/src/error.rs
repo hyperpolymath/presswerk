@@ -63,6 +63,10 @@ pub enum PresswerkError {
 
     #[error("feature not available on this platform")]
     PlatformUnavailable,
+
+    // -- State --
+    #[error("operation not valid right now: {0}")]
+    InvalidState(String),
 }
 
 /// Alias used throughout the codebase.
@@ -150,6 +154,14 @@ mod tests {
         let err = PresswerkError::PlatformUnavailable;
         let msg = err.to_string();
         assert_eq!(msg, "feature not available on this platform");
+    }
+
+    #[test]
+    fn test_invalid_state_error() {
+        let err = PresswerkError::InvalidState("job is not held".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("not valid right now"));
+        assert!(msg.contains("job is not held"));
     }
 
     #[test]

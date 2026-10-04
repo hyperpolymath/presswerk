@@ -32,6 +32,7 @@ rten-tensor = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+serde_json = { workspace = true }
 
 [[bench]]
 name = "document_bench"

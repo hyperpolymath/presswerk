@@ -15,9 +15,10 @@ use std::sync::{Arc, Mutex};
 use presswerk_core::AppConfig;
 use presswerk_core::error::{PresswerkError, Result};
 use presswerk_core::types::{
-    DiscoveredPrinter, DocumentType, JobId, JobSource, JobStatus, PrintJob, PrintSettings,
-    ServerStatus,
+    DiscoveredPrinter, DocumentType, FormOrigin, JobId, JobSource, JobStatus, PrintJob,
+    PrintSettings, ServerStatus,
 };
+use presswerk_document::classify_for_print;
 use presswerk_print::discovery::PrinterDiscovery;
 use presswerk_print::ipp_client::IppClient;
 use presswerk_print::ipp_server::IppServer;
@@ -181,8 +182,14 @@ impl AppServices {
     /// so other devices on the LAN can discover and print to this device.
     pub async fn start_ipp_server(&self) -> Result<ServerStatus> {
         let job_queue = Arc::clone(&self.job_queue);
+        let audit_log = Arc::clone(&self.audit_log);
+        let policy = self.config().form_provenance_policy;
+
         let mut server = self.ipp_server.lock().await;
-        server.start(job_queue).await?;
+        // The policy is copied into the connection state at start-up, so a
+        // change in Settings takes effect the next time the server starts.
+        server.set_form_provenance_policy(policy);
+        server.start_with_audit(job_queue, Some(audit_log)).await?;
         self.audit(
             "server_start",
             "system",
@@ -212,8 +219,10 @@ impl AppServices {
 
     /// Send a document to a printer via IPP.
     ///
-    /// Creates a print job in the queue, sends it via IPP, updates the job
-    /// status, and records the operation in the audit log.
+    /// Classifies the document's form provenance (issue #118, ruling D189),
+    /// creates a print job in the queue carrying that determination, records
+    /// the operation in the audit log, and — unless the job is held for review
+    /// — sends it via IPP.
     pub async fn print_document(
         &self,
         document_bytes: Vec<u8>,
@@ -225,6 +234,12 @@ impl AppServices {
         let doc_hash = hash_bytes(&document_bytes);
         let total_bytes = document_bytes.len() as u64;
 
+        // Classify before enqueueing, so the determination is part of the
+        // stored job rather than an afterthought.
+        let policy = self.config().form_provenance_policy;
+        let provenance = classify_for_print(&document_bytes, document_type, policy);
+        let hold = provenance.should_hold(policy);
+
         // Create the job record
         let mut job = PrintJob::new(
             JobSource::Local,
@@ -235,6 +250,17 @@ impl AppServices {
         job.printer_uri = Some(printer_uri.clone());
         job.settings = settings.clone();
         job.total_bytes = total_bytes;
+        job.form_provenance = provenance.clone();
+        if hold {
+            job.status = JobStatus::Held;
+        }
+
+        // A held job has to survive until the user releases it, so its bytes
+        // are persisted. Documents that print immediately are not written to
+        // disk — they are handed to the printer and dropped, as before.
+        if hold {
+            self.store_document(&document_bytes)?;
+        }
 
         // Insert into persistent queue
         {
@@ -244,15 +270,105 @@ impl AppServices {
 
         let job_id = job.id;
 
-        // Record audit entry
+        // Record audit entries
         self.audit("print_submitted", &doc_hash, true, Some(&document_name));
+        if provenance.is_form() {
+            self.audit(
+                "form_provenance",
+                &doc_hash,
+                true,
+                Some(&provenance.audit_json()),
+            );
+        }
 
-        // Send to printer asynchronously
+        // Routing: under the hold policy a machine-filled form waits for the
+        // user instead of going straight to the printer.
+        if hold {
+            warn!(
+                job_id = %job_id,
+                summary = %provenance.summary(),
+                "print job held for review: machine-filled form"
+            );
+            self.audit(
+                "job_held_machine_filled",
+                &doc_hash,
+                true,
+                Some("machine-filled form held for review per form provenance policy"),
+            );
+            return Ok(job_id);
+        }
+
+        self.spawn_send(
+            job_id,
+            document_bytes,
+            document_type,
+            document_name,
+            printer_uri,
+            settings,
+            doc_hash,
+        );
+
+        Ok(job_id)
+    }
+
+    /// Release a job that was held for review and send it to its printer.
+    ///
+    /// This is the user's answer to a machine-filled form that the routing
+    /// policy parked (issue #118). The released job keeps its identity and its
+    /// recorded provenance; only its status changes.
+    pub async fn release_job(&self, job_id: &JobId) -> Result<()> {
+        let job = {
+            let queue = acquire_lock(&self.job_queue);
+            queue.get_job(job_id)?
+        }
+        .ok_or_else(|| PresswerkError::InvalidState(format!("job {job_id} no longer exists")))?;
+
+        if job.status != JobStatus::Held {
+            return Err(PresswerkError::InvalidState(format!(
+                "job {job_id} is not waiting for review"
+            )));
+        }
+
+        let printer_uri = job.printer_uri.clone().ok_or_else(|| {
+            PresswerkError::InvalidState(format!("job {job_id} has no printer selected"))
+        })?;
+
+        let document_bytes = self.load_document(&job.document_hash)?;
+
+        {
+            let queue = acquire_lock(&self.job_queue);
+            queue.update_status(job_id, JobStatus::Pending, None)?;
+        }
+
+        self.audit("job_released", &job.document_hash, true, Some(&job.document_name));
+
+        self.spawn_send(
+            *job_id,
+            document_bytes,
+            job.document_type,
+            job.document_name,
+            printer_uri,
+            job.settings,
+            job.document_hash,
+        );
+
+        Ok(())
+    }
+
+    /// Hand a document to the printer on a background task and record the
+    /// outcome in the queue and the audit trail.
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_send(
+        &self,
+        job_id: JobId,
+        doc_bytes: Vec<u8>,
+        document_type: DocumentType,
+        name: String,
+        uri: String,
+        settings: PrintSettings,
+        hash: String,
+    ) {
         let services = self.clone();
-        let doc_bytes = document_bytes;
-        let uri = printer_uri;
-        let name = document_name;
-        let hash = doc_hash;
 
         tokio::spawn(async move {
             // Update status to Processing
@@ -293,8 +409,6 @@ impl AppServices {
                 }
             }
         });
-
-        Ok(job_id)
     }
 
     // -- Job Queue -----------------------------------------------------------
@@ -309,6 +423,13 @@ impl AppServices {
     pub fn pending_jobs(&self) -> Result<Vec<PrintJob>> {
         let queue = acquire_lock(&self.job_queue);
         queue.get_pending_jobs()
+    }
+
+    /// Get every job whose document was classified as a machine-filled form
+    /// (issue #118, ruling D189).
+    pub fn machine_filled_jobs(&self) -> Result<Vec<PrintJob>> {
+        let queue = acquire_lock(&self.job_queue);
+        queue.get_jobs_with_form_origin(FormOrigin::Machine)
     }
 
     /// Cancel a job.

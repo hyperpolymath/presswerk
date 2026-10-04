@@ -177,6 +177,14 @@ pub fn humanize_error(err: &PresswerkError) -> HumanError {
             retriable: false,
             severity: Severity::Permanent,
         },
+
+        // -- State --
+        PresswerkError::InvalidState(detail) => HumanError {
+            message: "That job can't do this at the moment.".into(),
+            suggestion: format!("Refresh the job list and try again. ({detail})"),
+            retriable: true,
+            severity: Severity::ActionRequired,
+        },
     }
 }
 
@@ -321,5 +329,14 @@ mod tests {
         let err = PresswerkError::UnsupportedDocument("application/msword".into());
         let human = humanize_error(&err);
         assert_eq!(human.severity, Severity::Permanent);
+    }
+
+    #[test]
+    fn invalid_state_asks_the_user_to_refresh() {
+        let err = PresswerkError::InvalidState("job 1234 is not held".into());
+        let human = humanize_error(&err);
+        assert_eq!(human.severity, Severity::ActionRequired);
+        assert!(human.retriable);
+        assert!(human.suggestion.contains("job 1234 is not held"));
     }
 }

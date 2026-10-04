@@ -6,6 +6,37 @@ The format is based on https://keepachangelog.com/en/1.1.0/[Keep a
 Changelog], and this project adheres to
 https://semver.org/spec/v2.0.0.html[Semantic Versioning].
 
+=== [Unreleased]
+
+==== Added
+
+* *Machine-filled form provenance* (https://github.com/hyperpolymath/presswerk/issues/118[#118],
+ruling D189): every PDF entering the print path is classified as machine-filled or
+hand-completed, and the determination — with its confidence and evidence — is stored on the
+job and written to the audit trail
+** New domain types `FormOrigin`, `ProvenanceConfidence`, `FormProvenance` and
+`FormProvenancePolicy` in `presswerk-core`
+** New detector `presswerk_document::pdf::form` — reads `/AcroForm` field values,
+`/NeedAppearances`, missing `/AP` appearances, `/DV` rewrites, the `/Producer` and `/Creator`
+strings, and an explicit `/FillOrigin` marker
+** Both print paths classify: locally selected documents (`AppServices::print_document`) and
+network-received IPP jobs (`handle_print_job`)
+** `form_origin` and `form_provenance` columns on the job queue, migrated in place for
+existing databases, queryable via `get_jobs_with_form_origin`
+** Audit actions `form_provenance`, `job_held_machine_filled` and `job_released`
+** Optional `HoldForReview` routing policy: a machine-filled form is held for the user rather
+than sent, with a `Release` action on the jobs page
+** Provenance badge on the jobs page, plain-language summary in the audit trail, policy
+selector in Settings
+** Position and marker convention recorded in `docs/ecosystem/FORM-PROVENANCE.adoc`
+
+==== Changed
+
+* `presswerk-print` now depends on `presswerk-document`: the network print path must classify
+documents itself, since a job received over IPP never passes through the application layer
+* A Print-Job response now reports the job's actual `job-state` — a job held for review is
+reported as held (4) instead of pending (3)
+
 === [0.3.0] - 2026-02-14
 
 ==== Added
