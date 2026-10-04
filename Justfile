@@ -65,7 +65,8 @@ ffp-conformance:
         exit 1
     fi
     cargo build --bin ffp-classify -p presswerk-document
-    FFP_DETECTOR="./target/debug/ffp-classify" bash "$STANDARDS/1-formats/sub-specs/form-fill-provenance/spec/conformance/run-conformance.sh"
+    TARGET_DIR="${CARGO_TARGET_DIR:-./target}"
+    FFP_DETECTOR="$TARGET_DIR/debug/ffp-classify" bash "$STANDARDS/1-formats/sub-specs/form-fill-provenance/spec/conformance/run-conformance.sh"
 
 # Full CI check (test + lint + fmt)
 ci: test-libs lint fmt-check
