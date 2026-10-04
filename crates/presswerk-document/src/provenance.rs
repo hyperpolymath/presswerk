@@ -81,54 +81,54 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     let mut declared_filled_by: Option<String> = None;
 
     // Step 2 — declared marker (XMP in catalog Metadata)
-    if let Ok(catalog) = document.catalog() {
-        if let Ok(meta_obj) = catalog.get(b"Metadata") {
-            let payload = get_metadata_payload(document, meta_obj);
-            if payload.is_empty() {
-                evidence.insert("FFP-E-XMP-UNREADABLE".to_string());
-            } else if contains_bytes(&payload, FFP_NS) {
-                // Namespace present — extract properties
-                let filled_by = xmp_extract(&payload, "filledBy");
-                let tool = xmp_extract(&payload, "tool");
-                let tool_version = xmp_extract(&payload, "toolVersion");
-                let filled_at = xmp_extract(&payload, "filledAt");
-                let ap_gen_str = xmp_extract(&payload, "appearancesGenerated");
-                let ap_gen = ap_gen_str
-                    .as_deref()
-                    .map(|s| s.eq_ignore_ascii_case("true"));
+    if let Ok(catalog) = document.catalog()
+        && let Ok(meta_obj) = catalog.get(b"Metadata")
+    {
+        let payload = get_metadata_payload(document, meta_obj);
+        if payload.is_empty() {
+            evidence.insert("FFP-E-XMP-UNREADABLE".to_string());
+        } else if contains_bytes(&payload, FFP_NS) {
+            // Namespace present — extract properties
+            let filled_by = xmp_extract(&payload, "filledBy");
+            let tool = xmp_extract(&payload, "tool");
+            let tool_version = xmp_extract(&payload, "toolVersion");
+            let filled_at = xmp_extract(&payload, "filledAt");
+            let ap_gen_str = xmp_extract(&payload, "appearancesGenerated");
+            let ap_gen = ap_gen_str
+                .as_deref()
+                .map(|s| s.eq_ignore_ascii_case("true"));
 
-                if let Some(fb) = filled_by {
-                    let fb_trim = fb.trim().to_string();
-                    if fb_trim == "machine" {
-                        evidence.insert("FFP-E-DECL-MACHINE".to_string());
-                        declared_filled_by = Some(fb_trim.clone());
-                        declared = Some(FfpDeclared {
-                            filled_by: fb_trim,
-                            tool: tool.filter(|s| !s.trim().is_empty()),
-                            tool_version: tool_version.filter(|s| !s.trim().is_empty()),
-                            filled_at: filled_at.filter(|s| !s.trim().is_empty()),
-                            appearances_generated: ap_gen,
-                        });
-                    } else {
-                        evidence.insert("FFP-E-DECL-UNRECOGNISED".to_string());
-                        // Still record declared verbatim per spec
-                        declared = Some(FfpDeclared {
-                            filled_by: fb_trim.clone(),
-                            tool: tool.filter(|s| !s.trim().is_empty()),
-                            tool_version: tool_version.filter(|s| !s.trim().is_empty()),
-                            filled_at: filled_at.filter(|s| !s.trim().is_empty()),
-                            appearances_generated: ap_gen,
-                        });
-                        declared_filled_by = Some(fb_trim);
-                        // For classification, unrecognised does not count as machine
-                    }
+            if let Some(fb) = filled_by {
+                let fb_trim = fb.trim().to_string();
+                if fb_trim == "machine" {
+                    evidence.insert("FFP-E-DECL-MACHINE".to_string());
+                    declared_filled_by = Some(fb_trim.clone());
+                    declared = Some(FfpDeclared {
+                        filled_by: fb_trim,
+                        tool: tool.filter(|s| !s.trim().is_empty()),
+                        tool_version: tool_version.filter(|s| !s.trim().is_empty()),
+                        filled_at: filled_at.filter(|s| !s.trim().is_empty()),
+                        appearances_generated: ap_gen,
+                    });
                 } else {
                     evidence.insert("FFP-E-DECL-UNRECOGNISED".to_string());
-                    // Namespace present but filledBy absent
+                    // Still record declared verbatim per spec
+                    declared = Some(FfpDeclared {
+                        filled_by: fb_trim.clone(),
+                        tool: tool.filter(|s| !s.trim().is_empty()),
+                        tool_version: tool_version.filter(|s| !s.trim().is_empty()),
+                        filled_at: filled_at.filter(|s| !s.trim().is_empty()),
+                        appearances_generated: ap_gen,
+                    });
+                    declared_filled_by = Some(fb_trim);
+                    // For classification, unrecognised does not count as machine
                 }
             } else {
-                // Metadata present but no FFP namespace — no declaration evidence
+                evidence.insert("FFP-E-DECL-UNRECOGNISED".to_string());
+                // Namespace present but filledBy absent
             }
+        } else {
+            // Metadata present but no FFP namespace — no declaration evidence
         }
     }
     // If Metadata not present, no XMP evidence.
@@ -580,7 +580,8 @@ fn is_meaningful(document: &Document, ft: &str, v_obj: Option<&Object>, v_raw: &
                                     return !name.eq_ignore_ascii_case(b"Off") && !name.is_empty();
                                 }
                                 Object::String(bytes, _) => {
-                                    return !bytes.eq_ignore_ascii_case(b"Off") && !bytes.is_empty();
+                                    return !bytes.eq_ignore_ascii_case(b"Off")
+                                        && !bytes.is_empty();
                                 }
                                 _ => return false,
                             }
@@ -613,12 +614,11 @@ fn is_meaningful(document: &Document, ft: &str, v_obj: Option<&Object>, v_raw: &
                             if is_string_object_meaningful(document, item) {
                                 return true;
                             }
-                            if let Object::Reference(id) = item {
-                                if let Ok(res) = document.get_object(*id) {
-                                    if is_string_object_meaningful(document, res) {
-                                        return true;
-                                    }
-                                }
+                            if let Object::Reference(id) = item
+                                && let Ok(res) = document.get_object(*id)
+                                && is_string_object_meaningful(document, res)
+                            {
+                                return true;
                             }
                         }
                         return false;
