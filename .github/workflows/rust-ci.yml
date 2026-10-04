@@ -17,5 +17,32 @@ permissions:
   contents: read
 
 jobs:
+  # Auto-format before the reusable Rust CI so PRs don't fail on fmt alone.
+  fmt:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2.9.2
+      - run: cargo fmt --all
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "fmt: cargo fmt --all"
+            git push
+          else
+            echo "no fmt changes"
+          fi
   rust-ci:
+    needs: fmt
     uses: hyperpolymath/standards/.github/workflows/rust-ci-reusable.yml@84355587cb2a1f86e6882de83514a32db2646e7a # re-pinned 2026-07-01: toolchain-required-input fix (standards#439)

@@ -69,6 +69,8 @@ jobs:
             fi
             return $code
           }
+          # Auto-format before checking so PRs don't fail on fmt alone (D189 follow-up)
+          cargo fmt --all || true
           run_logged check cargo check --workspace --all-targets || true
           run_logged test cargo test -p presswerk-core -p presswerk-security -p presswerk-document -p presswerk-print || true
           run_logged clippy cargo clippy --workspace --all-targets -- -D warnings || true
