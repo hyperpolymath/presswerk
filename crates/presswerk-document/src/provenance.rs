@@ -689,7 +689,8 @@ fn is_meaningful(document: &Document, ft: &str, v_obj: Option<&Object>, v_raw: &
                                     return !name.eq_ignore_ascii_case(b"Off") && !name.is_empty();
                                 }
                                 Object::String(bytes, _) => {
-                                    return !bytes.eq_ignore_ascii_case(b"Off") && !bytes.is_empty();
+                                    return !bytes.eq_ignore_ascii_case(b"Off")
+                                        && !bytes.is_empty();
                                 }
                                 _ => return false,
                             }
