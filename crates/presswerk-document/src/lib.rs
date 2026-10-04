@@ -19,11 +19,12 @@
 pub mod convert;
 pub mod image;
 pub mod pdf;
+pub mod provenance;
 pub mod scan;
 
 // CONVENIENCE: Primary interfaces for document transformation.
 pub use image::processor::ImageProcessor;
-pub use pdf::form::{classify_for_print, classify_pdf};
+pub use provenance::{classify_for_print, classify_pdf};
 pub use pdf::reader::PdfReader;
 pub use pdf::writer::PdfWriter;
 pub use scan::enhance::ScanEnhancer;

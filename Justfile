@@ -54,6 +54,19 @@ assail:
 verify-abi:
     cd src/abi && idris2 --check Types.idr && idris2 --check Protocol.idr && idris2 --check Encryption.idr && idris2 --check Layout.idr && idris2 --check Bridge.idr
 
+# FFP conformance (requires standards checkout at $STANDARDS_DIR or ../standards)
+ffp-conformance:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    STANDARDS="${STANDARDS_DIR:-../standards}"
+    if [ ! -d "$STANDARDS/1-formats/sub-specs/form-fill-provenance/spec/conformance" ]; then
+        echo "standards checkout not found at $STANDARDS"
+        echo "hint: git clone https://github.com/hyperpolymath/standards ../standards"
+        exit 1
+    fi
+    cargo build --bin ffp-classify -p presswerk-document
+    FFP_DETECTOR="./target/debug/ffp-classify" bash "$STANDARDS/1-formats/sub-specs/form-fill-provenance/spec/conformance/run-conformance.sh"
+
 # Full CI check (test + lint + fmt)
 ci: test-libs lint fmt-check
 

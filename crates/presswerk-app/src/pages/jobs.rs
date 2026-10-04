@@ -63,7 +63,10 @@ pub fn Jobs() -> Element {
                         let can_release = matches!(job_status, JobStatus::Held);
                         let is_terminal = matches!(job_status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled);
                         let provenance_note = job.form_provenance.summary();
-                        let machine_filled = job.form_provenance.is_machine_filled();
+                        let provenance_label = job.form_provenance.label();
+                        let show_provenance = job.form_provenance.form != presswerk_core::provenance::FfpForm::Unknown;
+                        let is_machine_or_suspected = job.form_provenance.is_machine_or_suspected();
+                        let hazard = job.form_provenance.has_blank_print_hazard();
 
                         rsx! {
                             div { style: "padding: 12px; margin: 8px 0; border: 1px solid #e0e0e0; border-radius: 8px;",
@@ -74,9 +77,14 @@ pub fn Jobs() -> Element {
                                     }
                                 }
                                 p { style: "color: #666; font-size: 14px; margin: 4px 0;", "{ts}" }
-                                if machine_filled {
-                                    p { style: "color: #8a5300; font-size: 12px; margin: 4px 0; background: #fff4e5; border: 1px solid #ffd8a8; border-radius: 4px; padding: 2px 6px;",
-                                        "Machine-filled: {provenance_note}"
+                                if show_provenance {
+                                    p { style: "color: {provenance_color(&job.form_provenance)}; font-size: 12px; margin: 4px 0; background: {provenance_bg(&job.form_provenance)}; border: 1px solid {provenance_border(&job.form_provenance)}; border-radius: 4px; padding: 2px 6px;",
+                                        "{provenance_label}: {provenance_note}"
+                                    }
+                                }
+                                if hazard {
+                                    p { style: "color: #721c24; font-size: 12px; margin: 4px 0; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 2px 6px;",
+                                        "⚠ Blank-print hazard: {job.form_provenance.filled_fields} field(s) have no appearance streams and may print empty (NeedAppearances is deprecated by ISO 32000-2)."
                                     }
                                 }
                                 if let Some(ref uri) = job.printer_uri {
@@ -148,6 +156,37 @@ pub fn Jobs() -> Element {
                 }
             }
         }
+    }
+}
+
+fn provenance_bg(p: &presswerk_core::provenance::FfpRecord) -> &'static str {
+    match p.classification {
+        presswerk_core::provenance::FfpClassification::MachineFilled => "#fff4e5",
+        presswerk_core::provenance::FfpClassification::MachineFilledSuspected => "#fff9db",
+        presswerk_core::provenance::FfpClassification::BlankForm => "#e8f5e9",
+        presswerk_core::provenance::FfpClassification::FilledUnknown => "#f3e5f5",
+        presswerk_core::provenance::FfpClassification::NoForm => "#f5f5f5",
+        presswerk_core::provenance::FfpClassification::Unreadable => "#ffebee",
+    }
+}
+fn provenance_border(p: &presswerk_core::provenance::FfpRecord) -> &'static str {
+    match p.classification {
+        presswerk_core::provenance::FfpClassification::MachineFilled => "#ffd8a8",
+        presswerk_core::provenance::FfpClassification::MachineFilledSuspected => "#ffec99",
+        presswerk_core::provenance::FfpClassification::BlankForm => "#c8e6c9",
+        presswerk_core::provenance::FfpClassification::FilledUnknown => "#ce93d8",
+        presswerk_core::provenance::FfpClassification::NoForm => "#e0e0e0",
+        presswerk_core::provenance::FfpClassification::Unreadable => "#ef9a9a",
+    }
+}
+fn provenance_color(p: &presswerk_core::provenance::FfpRecord) -> &'static str {
+    match p.classification {
+        presswerk_core::provenance::FfpClassification::MachineFilled => "#8a5300",
+        presswerk_core::provenance::FfpClassification::MachineFilledSuspected => "#6d4c00",
+        presswerk_core::provenance::FfpClassification::BlankForm => "#1b5e20",
+        presswerk_core::provenance::FfpClassification::FilledUnknown => "#4a148c",
+        presswerk_core::provenance::FfpClassification::NoForm => "#616161",
+        presswerk_core::provenance::FfpClassification::Unreadable => "#b71c1c",
     }
 }
 

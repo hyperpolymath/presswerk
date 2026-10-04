@@ -73,11 +73,10 @@ impl PdfReader {
     /// Classify whether this document's form values were written by software
     /// or by a person (issue #118, ruling D189).
     ///
-    /// Note: only *structured* provenance markers (the `Fill*` entries in the
-    /// document information dictionary) are consulted here, because the
-    /// original byte stream is not retained once the document is parsed.
-    /// [`crate::pdf::form::classify_pdf`] additionally scans the raw bytes and
-    /// any uncompressed XMP packet, and is what the print path uses.
+    /// Note: this consults the parsed object tree only (AcroForm + XMP packet
+    /// if still decodable). Prefer [`crate::pdf::form::classify_pdf`] /
+    /// [`crate::provenance::classify_pdf`] which scan the raw byte stream
+    /// before parsing and therefore see the uncompressed XMP and the original\n    /// `%PDF` header (issue #122, FFP/1 MARKER: XMP at Catalog /Metadata,\n    /// ffp:filledBy=machine). The print path always uses the raw-byte entry.
     pub fn form_provenance(&self) -> FormProvenance {
         super::form::classify_document(&self.document, &[])
     }
