@@ -1,1 +1,1 @@
-Local, high-assurance print router — your files never leave the device.
+Local, high-assurance print router — documents are sent to your selected printer when you print.
