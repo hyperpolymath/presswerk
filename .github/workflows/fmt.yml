@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MPL-2.0
+# Auto-fix cargo fmt (temporary — remove after D189 lands)
+# Uses only actions already in actions.lock to avoid lock churn.
+
+name: fmt
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2.9.2
+      - run: cargo fmt --all
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "fmt: cargo fmt --all"
+            git push
+          else
+            echo "no fmt changes"
+          fi
