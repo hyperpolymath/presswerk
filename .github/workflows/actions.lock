@@ -7,6 +7,10 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
         - 'swatinem/rust-cache@v2.9.2'
+    '.github/workflows/fmt.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'dtolnay/rust-toolchain@v1'
+        - 'Swatinem/rust-cache@v2.9.2'
     '.github/workflows/boj-build.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/casket-pages.yml':
@@ -50,7 +54,10 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'softprops/action-gh-release@v3.0.3'
         - 'swatinem/rust-cache@v2.9.2'
-    '.github/workflows/rust-ci.yml': []
+    '.github/workflows/rust-ci.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'dtolnay/rust-toolchain@v1'
+        - 'Swatinem/rust-cache@v2.9.2'
     '.github/workflows/scorecard.yml': []
     '.github/workflows/secret-scanner.yml': []
     '.github/workflows/security.yml':

@@ -1892,7 +1892,9 @@ mod tests {
         policy: FormProvenancePolicy,
     ) -> (SharedState, Arc<Mutex<AuditLog>>) {
         let mut state = make_shared_state_with_dir(data_dir);
-        let audit_log = Arc::new(Mutex::new(AuditLog::open_in_memory().expect("open audit log")));
+        let audit_log = Arc::new(Mutex::new(
+            AuditLog::open_in_memory().expect("open audit log"),
+        ));
         state.audit_log = Some(Arc::clone(&audit_log));
         state.form_provenance_policy = policy;
         (state, audit_log)
@@ -2399,8 +2401,15 @@ mod tests {
                 Object::String(b"Smith".to_vec(), StringFormat::Literal),
             );
         } else {
+            // A viewer-written appearance: /N references a real appearance
+            // stream, as in the conformance `viewer-filled` vector. With
+            // this, the hand-filled shape carries no blank-print hazard.
+            let stream_id = document.add_object(Object::Stream(lopdf::Stream::new(
+                Dictionary::new(),
+                Vec::new(),
+            )));
             let mut appearance = Dictionary::new();
-            appearance.set("N", Object::Null);
+            appearance.set("N", Object::Reference(stream_id));
             field.set("AP", Object::Dictionary(appearance));
         }
         let field_id = document.add_object(Object::Dictionary(field));
@@ -2431,7 +2440,9 @@ mod tests {
         ];
         let data = build_test_ipp_request(OP_PRINT_JOB, request_id, &attrs, document);
         let request = parse_ipp_request(&data).expect("parse_ipp_request failed");
-        let peer: SocketAddr = "10.0.0.9:1234".parse().expect("hardcoded address is invalid");
+        let peer: SocketAddr = "10.0.0.9:1234"
+            .parse()
+            .expect("hardcoded address is invalid");
         let response = dispatch_operation(&request, peer, state);
         parse_ipp_request(&response).expect("parse_ipp_request failed")
     }
@@ -2451,7 +2462,12 @@ mod tests {
 
         let provenance = &jobs[0].form_provenance;
         assert!(provenance.is_form());
-        assert!(provenance.is_machine_filled() || provenance.classification == presswerk_core::provenance::FfpClassification::MachineFilledSuspected, "{provenance:?}");
+        assert!(
+            provenance.is_machine_filled()
+                || provenance.classification
+                    == presswerk_core::provenance::FfpClassification::MachineFilledSuspected,
+            "{provenance:?}"
+        );
         assert_eq!(provenance.filled_fields, 1);
 
         // Recording alone must not change routing.
@@ -2460,10 +2476,17 @@ mod tests {
         // And the determination is queryable for audit and routing.
         assert_eq!(
             queue
-                .get_jobs_with_form_origin(presswerk_core::provenance::FfpClassification::MachineFilled)
+                .get_jobs_with_form_origin(
+                    presswerk_core::provenance::FfpClassification::MachineFilled
+                )
                 .expect("query by origin")
                 .len()
-            + queue.get_jobs_with_form_origin(presswerk_core::provenance::FfpClassification::MachineFilledSuspected).expect("query suspected").len(),
+                + queue
+                    .get_jobs_with_form_origin(
+                        presswerk_core::provenance::FfpClassification::MachineFilledSuspected
+                    )
+                    .expect("query suspected")
+                    .len(),
             1
         );
     }
@@ -2471,8 +2494,7 @@ mod tests {
     #[test]
     fn network_print_job_writes_form_provenance_to_the_audit_trail() {
         let tmp = make_test_data_dir();
-        let (state, audit) =
-            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
+        let (state, audit) = make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
 
         let parsed = submit_pdf(&state, &machine_filled_pdf(), 601);
         assert_eq!(parsed.operation_id, STATUS_OK);
@@ -2485,14 +2507,17 @@ mod tests {
             .expect("form_provenance audit entry");
         assert!(entry.success);
         let details = entry.details.as_deref().expect("details present");
-        assert!(details.contains("\"classification\":\"machine-filled") || details.contains("\"classification\":\"machine-filled-suspected\""), "{details}");
+        assert!(
+            details.contains("\"classification\":\"machine-filled")
+                || details.contains("\"classification\":\"machine-filled-suspected\""),
+            "{details}"
+        );
     }
 
     #[test]
     fn non_form_documents_are_not_audited_as_forms() {
         let tmp = make_test_data_dir();
-        let (state, audit) =
-            make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
+        let (state, audit) = make_shared_state_with_audit(tmp.path(), FormProvenancePolicy::Record);
 
         let parsed = submit_pdf(&state, b"not really a PDF", 602);
         assert_eq!(parsed.operation_id, STATUS_OK);
@@ -2537,9 +2562,11 @@ mod tests {
 
         let log = audit.lock().expect("audit mutex poisoned");
         let entries = log.recent_entries(10).expect("recent entries");
-        assert!(entries
-            .iter()
-            .any(|e| e.action == "job_held_machine_filled"));
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.action == "job_held_machine_filled")
+        );
     }
 
     #[test]
@@ -2572,7 +2599,10 @@ mod tests {
 
         let queue = state.job_queue.lock().expect("mutex poisoned");
         let jobs = queue.get_all_jobs().expect("get_all_jobs");
-        assert_eq!(jobs[0].form_provenance.classification, presswerk_core::provenance::FfpClassification::Unreadable);
+        assert_eq!(
+            jobs[0].form_provenance.classification,
+            presswerk_core::provenance::FfpClassification::Unreadable
+        );
         assert!(!jobs[0].form_provenance.is_machine_filled());
         assert_eq!(jobs[0].status, JobStatus::Pending);
     }

@@ -65,7 +65,6 @@ pub fn Jobs() -> Element {
                         let provenance_note = job.form_provenance.summary();
                         let provenance_label = job.form_provenance.label();
                         let show_provenance = job.form_provenance.form != presswerk_core::provenance::FfpForm::Unknown;
-                        let is_machine_or_suspected = job.form_provenance.is_machine_or_suspected();
                         let hazard = job.form_provenance.has_blank_print_hazard();
 
                         rsx! {

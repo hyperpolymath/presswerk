@@ -7,7 +7,9 @@
 use std::collections::HashSet;
 
 use lopdf::{Dictionary, Document, Object, ObjectId};
-use presswerk_core::provenance::{FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord};
+use presswerk_core::provenance::{
+    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord,
+};
 use presswerk_core::types::{DocumentType, FormProvenancePolicy};
 use tracing::{debug, instrument};
 
@@ -24,7 +26,11 @@ const FFP_NS: &[u8] = b"https://hyperpolymath.dev/ns/form-fill-provenance/1.0/";
 // ---------------------------------------------------------------------------
 
 #[instrument(skip_all, fields(bytes = data.len(), policy = %policy.as_token()))]
-pub fn classify_for_print(data: &[u8], document_type: DocumentType, policy: FormProvenancePolicy) -> FfpRecord {
+pub fn classify_for_print(
+    data: &[u8],
+    document_type: DocumentType,
+    policy: FormProvenancePolicy,
+) -> FfpRecord {
     if !policy.inspects() {
         debug!("form provenance inspection disabled by policy");
         return FfpRecord::unreadable("form provenance inspection is disabled");
@@ -62,12 +68,12 @@ pub fn classify_pdf(data: &[u8]) -> FfpRecord {
 
 #[instrument(skip_all, fields(raw_bytes = raw.len()))]
 pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
-    // Cheap pre-check: if %PDF- missing, unreadable (matches probe)
+    // Cheap pre-check (matches the probe): when raw bytes are available and
+    // lack a %PDF- header, the document is unreadable. `raw` may be empty
+    // when called from [`PdfReader`], which no longer retains the bytes;
+    // then we rely on the already-parsed object graph.
     if !raw.is_empty() && !contains_bytes(raw, b"%PDF-") {
-        // But raw may be empty (called from PdfReader); then we still try document parse
-        // If document was parsed successfully, raw check is not authoritative.
-        // Only if raw non-empty and missing PDF header, treat as unreadable.
-        // However if raw empty, we rely on document structure.
+        return FfpRecord::unreadable("no %PDF- header in raw bytes");
     }
 
     let mut evidence: HashSet<String> = HashSet::new();
@@ -75,15 +81,11 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     let mut declared_filled_by: Option<String> = None;
 
     // Step 2 — declared marker (XMP in catalog Metadata)
-    let mut xmp_found = false;
-    let mut xmp_unreadable = false;
     if let Ok(catalog) = document.catalog() {
         if let Ok(meta_obj) = catalog.get(b"Metadata") {
-            xmp_found = true;
             let payload = get_metadata_payload(document, meta_obj);
             if payload.is_empty() {
                 evidence.insert("FFP-E-XMP-UNREADABLE".to_string());
-                xmp_unreadable = true;
             } else if contains_bytes(&payload, FFP_NS) {
                 // Namespace present — extract properties
                 let filled_by = xmp_extract(&payload, "filledBy");
@@ -91,7 +93,9 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
                 let tool_version = xmp_extract(&payload, "toolVersion");
                 let filled_at = xmp_extract(&payload, "filledAt");
                 let ap_gen_str = xmp_extract(&payload, "appearancesGenerated");
-                let ap_gen = ap_gen_str.as_deref().map(|s| s.eq_ignore_ascii_case("true"));
+                let ap_gen = ap_gen_str
+                    .as_deref()
+                    .map(|s| s.eq_ignore_ascii_case("true"));
 
                 if let Some(fb) = filled_by {
                     let fb_trim = fb.trim().to_string();
@@ -146,7 +150,11 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
         }
     };
 
-    let acroform_dict = match catalog.get(b"AcroForm").ok().and_then(|obj| resolve_dict(document, obj)) {
+    let acroform_dict = match catalog
+        .get(b"AcroForm")
+        .ok()
+        .and_then(|obj| resolve_dict(document, obj))
+    {
         Some(d) => d,
         None => {
             evidence.insert("FFP-E-NO-ACROFORM".to_string());
@@ -167,7 +175,10 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     };
 
     // NeedAppearances
-    if matches!(acroform_dict.get(b"NeedAppearances"), Ok(Object::Boolean(true))) {
+    if matches!(
+        acroform_dict.get(b"NeedAppearances"),
+        Ok(Object::Boolean(true))
+    ) {
         evidence.insert("FFP-E-NEED-APPEARANCES".to_string());
     }
 
@@ -180,7 +191,12 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     };
     let mut seen: HashSet<ObjectId> = HashSet::new();
     if let Ok(fields_obj) = acroform_dict.get(b"Fields") {
-        walk_field(document, fields_obj, "", "", "", 0, &mut seen, &mut scan, &mut evidence);
+        let inherit = Inherited {
+            ft: "",
+            ff: "",
+            v: "",
+        };
+        walk_field(document, fields_obj, inherit, 0, &mut seen, &mut scan);
     }
 
     let total = scan.total;
@@ -218,12 +234,18 @@ pub fn classify_document(document: &Document, raw: &[u8]) -> FfpRecord {
     }
 
     // Step 6 — classify
-    let form = if total > 0 { FfpForm::Present } else { FfpForm::Absent };
+    let form = if total > 0 {
+        FfpForm::Present
+    } else {
+        FfpForm::Absent
+    };
     let classification = if filled == 0 {
         FfpClassification::BlankForm
     } else if declared_filled_by.as_deref() == Some("machine") {
         FfpClassification::MachineFilled
-    } else if evidence.contains("FFP-E-NEED-APPEARANCES") && evidence.contains("FFP-E-AP-INCOMPLETE") {
+    } else if evidence.contains("FFP-E-NEED-APPEARANCES")
+        && evidence.contains("FFP-E-AP-INCOMPLETE")
+    {
         FfpClassification::MachineFilledSuspected
     } else {
         FfpClassification::FilledUnknown
@@ -257,16 +279,22 @@ struct FieldScan {
     visited: u32,
 }
 
+/// Field attributes inherited from ancestor nodes (ISO 32000 field
+/// inheritance): field type `/FT`, field flags `/Ff`, and value `/V`.
+#[derive(Clone, Copy)]
+struct Inherited<'a> {
+    ft: &'a str,
+    ff: &'a str,
+    v: &'a str,
+}
+
 fn walk_field(
     document: &Document,
     node: &Object,
-    inherit_ft: &str,
-    inherit_ff: &str,
-    inherit_v: &str,
+    inherit: Inherited<'_>,
     depth: u32,
     seen: &mut HashSet<ObjectId>,
     scan: &mut FieldScan,
-    _evidence: &mut HashSet<String>,
 ) {
     if depth > MAX_FIELD_DEPTH || scan.visited >= MAX_FIELD_NODES {
         return;
@@ -278,56 +306,62 @@ fn walk_field(
             }
             scan.visited += 1;
             if let Ok(resolved) = document.get_object(*id) {
-                walk_field(document, resolved, inherit_ft, inherit_ff, inherit_v, depth + 1, seen, scan, _evidence);
+                walk_field(document, resolved, inherit, depth + 1, seen, scan);
             }
         }
         Object::Array(items) => {
             for item in items {
-                walk_field(document, item, inherit_ft, inherit_ff, inherit_v, depth + 1, seen, scan, _evidence);
+                walk_field(document, item, inherit, depth + 1, seen, scan);
             }
         }
         Object::Dictionary(dict) => {
             scan.visited += 1;
             // Inherit
-            let ft = get_string_value(dict, b"FT").unwrap_or_else(|| inherit_ft.to_string());
-            let ff = get_string_value(dict, b"Ff").unwrap_or_else(|| inherit_ff.to_string());
-            let v_raw = dict.get(b"V").ok().map(|o| object_to_string(o)).unwrap_or_else(|| inherit_v.to_string());
+            let ft = get_string_value(dict, b"FT").unwrap_or_else(|| inherit.ft.to_string());
+            let ff = get_string_value(dict, b"Ff").unwrap_or_else(|| inherit.ff.to_string());
+            let v_raw = dict
+                .get(b"V")
+                .ok()
+                .map(object_to_string)
+                .unwrap_or_else(|| inherit.v.to_string());
 
             // Check Kids
             if let Ok(kids_obj) = dict.get(b"Kids") {
                 let kids_ids = get_array_ids(document, kids_obj);
                 if !kids_ids.is_empty() {
-                    // Check first kid's Subtype
-                    let first_is_widget = kids_ids.first().and_then(|id| document.get_object(*id).ok()).map(|obj| {
-                        if let Object::Dictionary(d) = obj {
-                            d.get(b"Subtype").ok().map(|s| format!("{:?}", s).contains("Widget")).unwrap_or(false)
-                        } else if let Object::Stream(s) = obj {
-                            s.dict.get(b"Subtype").ok().map(|v| format!("{:?}", v).contains("Widget")).unwrap_or(false)
-                        } else {
-                            false
-                        }
-                    }).unwrap_or(false);
-
-                    // More robust: check via resolve
-                    let first_id = kids_ids[0];
-                    let first_is_widget2 = document.get_object(first_id).ok().and_then(|o| {
-                        let dict_opt = match o {
-                            Object::Dictionary(d) => Some(d),
-                            Object::Stream(s) => Some(&s.dict),
-                            _ => None,
-                        };
-                        dict_opt.map(|d| d.get(b"Subtype").ok().map(|v| matches!(v, Object::Name(n) if n == b"Widget")).unwrap_or(false))
-                    }).unwrap_or(false);
-
-                    let is_widget = first_is_widget || first_is_widget2;
+                    // If the first kid is a widget annotation this is a
+                    // terminal field with widget kids; otherwise the kids are
+                    // intermediate field nodes and we recurse into them.
+                    let is_widget = kids_ids
+                        .first()
+                        .and_then(|id| document.get_object(*id).ok())
+                        .and_then(|o| {
+                            let dict_opt = match o {
+                                Object::Dictionary(d) => Some(d),
+                                Object::Stream(s) => Some(&s.dict),
+                                _ => None,
+                            };
+                            dict_opt.map(|d| {
+                                d.get(b"Subtype")
+                                    .ok()
+                                    .map(|v| matches!(v, Object::Name(n) if n == b"Widget"))
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(false);
                     if is_widget {
                         // Terminal field with widget kids
                         register_field(document, dict, &ft, &ff, &v_raw, &kids_ids, scan);
                     } else {
                         // Intermediate — recurse
+                        let next = Inherited {
+                            ft: &ft,
+                            ff: &ff,
+                            v: &v_raw,
+                        };
                         for kid_id in kids_ids {
                             if let Ok(kid_obj) = document.get_object(kid_id) {
-                                walk_field(document, kid_obj, &ft, &ff, &v_raw, depth + 1, seen, scan, _evidence);
+                                walk_field(document, kid_obj, next, depth + 1, seen, scan);
                             }
                         }
                     }
@@ -342,26 +376,46 @@ fn walk_field(
         Object::Stream(stream) => {
             scan.visited += 1;
             let dict = &stream.dict;
-            let ft = get_string_value(dict, b"FT").unwrap_or_else(|| inherit_ft.to_string());
-            let ff = get_string_value(dict, b"Ff").unwrap_or_else(|| inherit_ff.to_string());
-            let v_raw = dict.get(b"V").ok().map(|o| object_to_string(o)).unwrap_or_else(|| inherit_v.to_string());
+            let ft = get_string_value(dict, b"FT").unwrap_or_else(|| inherit.ft.to_string());
+            let ff = get_string_value(dict, b"Ff").unwrap_or_else(|| inherit.ff.to_string());
+            let v_raw = dict
+                .get(b"V")
+                .ok()
+                .map(object_to_string)
+                .unwrap_or_else(|| inherit.v.to_string());
             if let Ok(kids_obj) = dict.get(b"Kids") {
                 let kids_ids = get_array_ids(document, kids_obj);
                 if !kids_ids.is_empty() {
                     // Similar widget check
-                    let is_widget = kids_ids.first().and_then(|id| document.get_object(*id).ok()).map(|o| {
-                        match o {
-                            Object::Dictionary(d) => d.get(b"Subtype").ok().map(|v| matches!(v, Object::Name(n) if n == b"Widget")).unwrap_or(false),
-                            Object::Stream(s) => s.dict.get(b"Subtype").ok().map(|v| matches!(v, Object::Name(n) if n == b"Widget")).unwrap_or(false),
+                    let is_widget = kids_ids
+                        .first()
+                        .and_then(|id| document.get_object(*id).ok())
+                        .map(|o| match o {
+                            Object::Dictionary(d) => d
+                                .get(b"Subtype")
+                                .ok()
+                                .map(|v| matches!(v, Object::Name(n) if n == b"Widget"))
+                                .unwrap_or(false),
+                            Object::Stream(s) => s
+                                .dict
+                                .get(b"Subtype")
+                                .ok()
+                                .map(|v| matches!(v, Object::Name(n) if n == b"Widget"))
+                                .unwrap_or(false),
                             _ => false,
-                        }
-                    }).unwrap_or(false);
+                        })
+                        .unwrap_or(false);
                     if is_widget {
                         register_field(document, dict, &ft, &ff, &v_raw, &kids_ids, scan);
                     } else {
+                        let next = Inherited {
+                            ft: &ft,
+                            ff: &ff,
+                            v: &v_raw,
+                        };
                         for kid_id in kids_ids {
                             if let Ok(kid_obj) = document.get_object(kid_id) {
-                                walk_field(document, kid_obj, &ft, &ff, &v_raw, depth + 1, seen, scan, _evidence);
+                                walk_field(document, kid_obj, next, depth + 1, seen, scan);
                             }
                         }
                     }
@@ -384,23 +438,22 @@ fn register_field(
     scan: &mut FieldScan,
 ) {
     // Normalize FT: should be like "/Tx", "/Ch", "/Btn"
-    let ft_norm = if ft.starts_with('/') { ft.to_string() } else if !ft.is_empty() { format!("/{}", ft) } else { "".to_string() };
+    let ft_norm = if ft.starts_with('/') {
+        ft.to_string()
+    } else if !ft.is_empty() {
+        format!("/{}", ft)
+    } else {
+        "".to_string()
+    };
     if !matches!(ft_norm.as_str(), "/Tx" | "/Ch" | "/Btn") {
         return;
     }
-    // Check Btn pushbutton bit
+    // Pushbuttons are not fillable: bit 17 (`0x10000`, ISO 32000 `/Ff`
+    // Pushbutton) — the probe's `int(ff / 65536) % 2 == 1`.
     if ft_norm == "/Btn" {
-        let ff_val = ff_str.trim().parse::<i32>().unwrap_or(0);
-        // Also handle hex? But assume decimal.
-        // Probe uses int(ff / 65536) %2 ==1
-        // We check bit 17 (0x10000)
-        let f_num = parse_ff(ff_str);
+        let f_num = ff_str.trim().parse::<i32>().unwrap_or(0);
         if (f_num & 0x10000) != 0 {
             return; // pushbutton, not fillable
-        }
-        // Also check via ff_val
-        if ff_val != 0 && (ff_val & 0x10000) != 0 {
-            return;
         }
     }
 
@@ -414,117 +467,81 @@ fn register_field(
     }
     scan.filled += 1;
 
-    // Appearance check per widget
-    let widgets: Vec<ObjectId> = if widget_ids.is_empty() {
-        // Field itself is widget — need to find its object id? We don't have it.
-        // For appearance, check field dict itself.
-        // We will treat field_dict as widget dict.
-        // Use a sentinel: check field_dict directly
-        // To simplify, we check field_dict's AP
-        if has_normal_appearance_dict(document, field_dict, v_raw) {
-            // has appearance
-        } else {
+    // Appearance check per widget.
+    if widget_ids.is_empty() {
+        // The field dictionary is itself the widget; check its own /AP.
+        if !has_normal_appearance_dict(document, field_dict, v_raw) {
             scan.ap_missing += 1;
         }
         return;
-    } else {
-        widget_ids.to_vec()
-    };
+    }
 
-    for wid in widgets {
-        if let Ok(widget_obj) = document.get_object(wid) {
-            let widget_dict = match widget_obj {
-                Object::Dictionary(d) => d,
-                Object::Stream(s) => &s.dict,
-                _ => continue,
-            };
-            if has_normal_appearance_dict(document, widget_dict, v_raw) {
-                continue;
-            } else {
-                scan.ap_missing += 1;
-            }
-        } else {
+    for &wid in widget_ids {
+        let Ok(widget_obj) = document.get_object(wid) else {
+            scan.ap_missing += 1;
+            continue;
+        };
+        let widget_dict = match widget_obj {
+            Object::Dictionary(d) => d,
+            Object::Stream(s) => &s.dict,
+            _ => continue,
+        };
+        if !has_normal_appearance_dict(document, widget_dict, v_raw) {
             scan.ap_missing += 1;
         }
     }
-}
-
-fn parse_ff(s: &str) -> i32 {
-    let t = s.trim();
-    if t.is_empty() {
-        return 0;
-    }
-    // Try decimal
-    if let Ok(v) = t.parse::<i32>() {
-        return v;
-    }
-    // Try name? Not.
-    0
 }
 
 fn has_normal_appearance_dict(document: &Document, widget_dict: &Dictionary, v_raw: &str) -> bool {
     // Check /AP
-    let ap_obj = match widget_dict.get(b"AP") {
-        Ok(o) => o,
-        Err(_) => return false,
+    let Ok(ap_obj) = widget_dict.get(b"AP") else {
+        return false;
     };
-    let ap_dict = match resolve_dict(document, ap_obj) {
-        Some(d) => d,
-        None => return false,
+    let Some(ap_dict) = resolve_dict(document, ap_obj) else {
+        return false;
     };
-    let n_obj = match ap_dict.get(b"N") {
-        Ok(o) => o,
-        Err(_) => return false,
+    let Ok(n_obj) = ap_dict.get(b"N") else {
+        return false;
     };
-    // Resolve N: could be stream or dict or reference
-    let n_resolved = match n_obj {
+    // Resolve /N: a stream is a normal appearance; a dictionary is keyed by
+    // appearance state and needs the current state to select an entry.
+    match n_obj {
+        Object::Stream(_) => true,
         Object::Reference(id) => match document.get_object(*id) {
-            Ok(Object::Stream(s)) => return true, // stream
-            Ok(Object::Dictionary(d)) => {
-                // Dict case: check for state
-                // Need current state: AS or V
-                let state = get_current_state(widget_dict, v_raw);
-                if state.is_empty() {
-                    return false;
-                }
-                // Dict key is state without leading /
-                let key = state.trim_start_matches('/');
-                // Look up key in dict
-                match d.get(key.as_bytes()) {
-                    Ok(Object::Reference(sid)) => match document.get_object(*sid) {
-                        Ok(Object::Stream(_)) => return true,
-                        Ok(Object::Dictionary(_)) => return true, // could be?
-                        _ => return false,
-                    },
-                    Ok(Object::Stream(_)) => return true,
-                    Ok(Object::Dictionary(_)) => return true,
-                    _ => return false,
-                }
-            }
-            Ok(Object::Array(_)) => return false,
-            _ => return false,
+            Ok(Object::Stream(_)) => true,
+            Ok(Object::Dictionary(d)) => state_appearance_exists(document, widget_dict, d, v_raw),
+            _ => false,
         },
-        Object::Stream(_) => return true,
-        Object::Dictionary(d) => {
-            let state = get_current_state(widget_dict, v_raw);
-            if state.is_empty() {
-                return false;
-            }
-            let key = state.trim_start_matches('/');
-            match d.get(key.as_bytes()) {
-                Ok(Object::Reference(sid)) => match document.get_object(*sid) {
-                    Ok(Object::Stream(_)) => return true,
-                    _ => return false,
-                },
-                Ok(Object::Stream(_)) => return true,
-                _ => return false,
-            }
+        Object::Dictionary(d) => state_appearance_exists(document, widget_dict, d, v_raw),
+        _ => false,
+    }
+}
+
+/// `/AP /N` is a subdictionary: the appearance exists only if the current
+/// appearance state (`/AS`, falling back to a name `/V` such as `/Yes`)
+/// selects an entry in it.
+fn state_appearance_exists(
+    document: &Document,
+    widget_dict: &Dictionary,
+    n_dict: &Dictionary,
+    v_raw: &str,
+) -> bool {
+    let state = get_current_state(widget_dict, v_raw);
+    if state.is_empty() {
+        return false;
+    }
+    // Dictionary keys are the state without its leading `/`.
+    let key = state.trim_start_matches('/');
+    match n_dict.get(key.as_bytes()) {
+        Ok(Object::Reference(sid)) => {
+            matches!(
+                document.get_object(*sid),
+                Ok(Object::Stream(_)) | Ok(Object::Dictionary(_))
+            )
         }
-        Object::Array(_) => return false,
-        _ => return false,
-    };
-    // If N is a name or other, not appearance
-    false
+        Ok(Object::Stream(_)) | Ok(Object::Dictionary(_)) => true,
+        _ => false,
+    }
 }
 
 fn get_current_state(widget_dict: &Dictionary, v_raw: &str) -> String {
@@ -559,8 +576,12 @@ fn is_meaningful(document: &Document, ft: &str, v_obj: Option<&Object>, v_raw: &
                     Object::Reference(id) => {
                         if let Ok(resolved) = document.get_object(*id) {
                             match resolved {
-                                Object::Name(name) => return !name.eq_ignore_ascii_case(b"Off") && !name.is_empty(),
-                                Object::String(bytes, _) => return !bytes.eq_ignore_ascii_case(b"Off") && !bytes.is_empty(),
+                                Object::Name(name) => {
+                                    return !name.eq_ignore_ascii_case(b"Off") && !name.is_empty();
+                                }
+                                Object::String(bytes, _) => {
+                                    return !bytes.eq_ignore_ascii_case(b"Off") && !bytes.is_empty();
+                                }
                                 _ => return false,
                             }
                         }
@@ -655,20 +676,28 @@ fn is_string_meaningful(bytes: &[u8]) -> bool {
     // We'll normalize: trim whitespace, then check if contains non-whitespace
     // For hex strings like "<...>", similar.
     // Simplify: remove surrounding `(` `)` or `<` `>` if present, then trim.
-    if s.len() >= 2 && s[0] == b'(' && s[s.len()-1] == b')' {
-        s = &s[1..s.len()-1];
+    if s.len() >= 2 && s[0] == b'(' && s[s.len() - 1] == b')' {
+        s = &s[1..s.len() - 1];
         // Unescape \( \) \\
         // For meaningful check, just check if after trimming whitespace there's content
     }
-    if s.len() >= 2 && s[0] == b'<' && s[s.len()-1] == b'>' {
-        s = &s[1..s.len()-1];
+    if s.len() >= 2 && s[0] == b'<' && s[s.len() - 1] == b'>' {
+        s = &s[1..s.len() - 1];
         // Hex: remove whitespace and 0s? Probe does gsub(/[ \t\r\n0]/,"",s) for hex.
         // We'll filter.
-        let filtered: Vec<u8> = s.iter().copied().filter(|&b| !b.is_ascii_whitespace() && b != b'0').collect();
+        let filtered: Vec<u8> = s
+            .iter()
+            .copied()
+            .filter(|&b| !b.is_ascii_whitespace() && b != b'0')
+            .collect();
         return !filtered.is_empty();
     }
     // Trim whitespace bytes
-    let trimmed: Vec<u8> = s.iter().copied().filter(|&b| b != b' ' && b != b'\t' && b != b'\r' && b != b'\n').collect();
+    let trimmed: Vec<u8> = s
+        .iter()
+        .copied()
+        .filter(|&b| b != b' ' && b != b'\t' && b != b'\r' && b != b'\n')
+        .collect();
     !trimmed.is_empty()
 }
 
@@ -680,23 +709,16 @@ fn resolve_dict<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Di
     match object {
         Object::Dictionary(dict) => Some(dict),
         Object::Stream(stream) => Some(&stream.dict),
-        Object::Reference(id) => document.get_object(*id).ok().and_then(|resolved| match resolved {
-            Object::Dictionary(dict) => Some(dict),
-            Object::Stream(stream) => Some(&stream.dict),
-            _ => None,
-        }),
-        _ => None,
-    }
-}
-
-#[allow(dead_code)]
-fn resolve_array<'a>(document: &'a Document, object: &'a Object) -> Option<&'a Vec<Object>> {
-    match object {
-        Object::Array(items) => Some(items),
-        Object::Reference(id) => document.get_object(*id).ok().and_then(|resolved| match resolved {
-            Object::Array(items) => Some(items),
-            _ => None,
-        }),
+        Object::Reference(id) => {
+            document
+                .get_object(*id)
+                .ok()
+                .and_then(|resolved| match resolved {
+                    Object::Dictionary(dict) => Some(dict),
+                    Object::Stream(stream) => Some(&stream.dict),
+                    _ => None,
+                })
+        }
         _ => None,
     }
 }
@@ -707,7 +729,11 @@ fn get_string_value(dict: &Dictionary, key: &[u8]) -> Option<String> {
         Ok(Object::String(bytes, _)) => Some(String::from_utf8_lossy(bytes).to_string()),
         Ok(Object::Integer(i)) => Some(i.to_string()),
         Ok(Object::Real(r)) => Some(r.to_string()),
-        Ok(Object::Boolean(b)) => Some(if *b { "true".to_string() } else { "false".to_string() }),
+        Ok(Object::Boolean(b)) => Some(if *b {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        }),
         Ok(Object::Reference(id)) => {
             // Try to resolve? For FT, Ff, V inheritance, the referenced value would be resolved elsewhere.
             // But we can try to get string from referenced object via dict lookup not available.
@@ -723,14 +749,22 @@ fn object_to_string(obj: &Object) -> String {
     match obj {
         Object::String(bytes, _) => format!("({})", String::from_utf8_lossy(bytes)),
         Object::Name(name) => format!("/{}", String::from_utf8_lossy(name)),
-        Object::Boolean(b) => if *b { "true".to_string() } else { "false".to_string() },
+        Object::Boolean(b) => {
+            if *b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }
+        }
         Object::Integer(i) => i.to_string(),
         Object::Real(r) => r.to_string(),
         Object::Null => "".to_string(),
         Object::Array(items) => {
             let mut s = String::from("[");
             for (i, item) in items.iter().enumerate() {
-                if i > 0 { s.push(' '); }
+                if i > 0 {
+                    s.push(' ');
+                }
                 s.push_str(&object_to_string(item));
             }
             s.push(']');
@@ -739,7 +773,6 @@ fn object_to_string(obj: &Object) -> String {
         Object::Dictionary(d) => format!("<<{}>>", d.len()),
         Object::Stream(_) => "<<stream>>".to_string(),
         Object::Reference(id) => format!("{} 0 R", id.0),
-        Object::Integer64(i) => i.to_string(),
     }
 }
 
@@ -750,15 +783,13 @@ fn get_array_ids(document: &Document, obj: &Object) -> Vec<ObjectId> {
             for item in items {
                 if let Object::Reference(id) = item {
                     ids.push(*id);
-                } else if let Object::Reference(id) = resolve_reference(document, item) {
-                    ids.push(id);
                 }
             }
         }
         Object::Reference(id) => {
             if let Ok(Object::Array(items)) = document.get_object(*id) {
                 for item in items {
-                    if let Object::Reference kid) = item {
+                    if let Object::Reference(kid) = item {
                         ids.push(*kid);
                     }
                 }
@@ -767,14 +798,6 @@ fn get_array_ids(document: &Document, obj: &Object) -> Vec<ObjectId> {
         _ => {}
     }
     ids
-}
-
-fn resolve_reference(document: &Document, obj: &Object) -> Option<ObjectId> {
-    if let Object::Reference(id) = obj {
-        Some(*id)
-    } else {
-        None
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -801,9 +824,6 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
-    let payload_str = String::from_utf8_lossy(payload);
-    let payload_s = payload_str.as_ref();
-
     // Attribute form: prop="value" or prop='value'
     // Search for prop with optional prefix like ffp:prop or any:prop
     // We look for `prop` then `\s*=\s*"`
@@ -840,7 +860,10 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
                         _ => {
                             // Unquoted (should not happen for XMP but handle)
                             let mut end = 0;
-                            while end < rest.len() && !rest[end].is_ascii_whitespace() && rest[end] != b'>' {
+                            while end < rest.len()
+                                && !rest[end].is_ascii_whitespace()
+                                && rest[end] != b'>'
+                            {
                                 end += 1;
                             }
                             if end > 0 {
@@ -881,12 +904,12 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
         }
     }
 
-    // Second pass for element form with prefix: search for `:prop>` 
+    // Second pass for element form with prefix: search for `:prop>`
     let prefixed = format!(":{}", prop);
     if let Some(pos) = find_ci(payload_bytes, prefixed.as_bytes()) {
         let after = pos + prefixed.len();
         if after < payload_bytes.len() && payload_bytes[after] == b'>' {
-            let rest = &payload_bytes[after+1..];
+            let rest = &payload_bytes[after + 1..];
             if let Some(end) = rest.iter().position(|&b| b == b'<') {
                 let val = &rest[..end];
                 let s = String::from_utf8_lossy(val).trim().to_string();
@@ -901,12 +924,14 @@ fn xmp_extract(payload: &[u8], prop: &str) -> Option<String> {
             rest = trim_ascii_start(rest);
             if !rest.is_empty() && rest[0] == b'=' {
                 rest = trim_ascii_start(&rest[1..]);
-                if !rest.is_empty() && (rest[0]==b'"' || rest[0]==b'\'') {
+                if !rest.is_empty() && (rest[0] == b'"' || rest[0] == b'\'') {
                     let quote = rest[0];
                     rest = &rest[1..];
                     if let Some(end) = rest.iter().position(|&b| b == quote) {
                         let s = String::from_utf8_lossy(&rest[..end]).trim().to_string();
-                        if !s.is_empty() { return Some(s); }
+                        if !s.is_empty() {
+                            return Some(s);
+                        }
                     }
                 }
             }
@@ -920,7 +945,9 @@ fn find_ci(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() || haystack.len() < needle.len() {
         return None;
     }
-    haystack.windows(needle.len()).position(|w| w.eq_ignore_ascii_case(needle))
+    haystack
+        .windows(needle.len())
+        .position(|w| w.eq_ignore_ascii_case(needle))
 }
 
 fn trim_ascii_start(bytes: &[u8]) -> &[u8] {
@@ -944,22 +971,45 @@ mod tests {
 
     impl TestField {
         const fn human(name: &'static str, value: &'static str) -> Self {
-            Self { name, value: Some(value), appearance: true }
+            Self {
+                name,
+                value: Some(value),
+                appearance: true,
+            }
         }
         const fn machine(name: &'static str, value: &'static str) -> Self {
-            Self { name, value: Some(value), appearance: false }
+            Self {
+                name,
+                value: Some(value),
+                appearance: false,
+            }
         }
         const fn blank(name: &'static str) -> Self {
-            Self { name, value: None, appearance: false }
+            Self {
+                name,
+                value: None,
+                appearance: false,
+            }
         }
     }
 
     fn build_pdf(fields: Vec<TestField>, need_appearances: bool, xmp: Option<String>) -> Vec<u8> {
         let mut document = Document::with_version("1.7");
-        let content_id = document.add_object(Object::Stream(lopdf::Stream::new(Dictionary::new(), Vec::new())));
+        let content_id = document.add_object(Object::Stream(lopdf::Stream::new(
+            Dictionary::new(),
+            Vec::new(),
+        )));
         let mut page = Dictionary::new();
         page.set("Type", Object::Name(b"Page".to_vec()));
-        page.set("MediaBox", Object::Array(vec![Object::Integer(0), Object::Integer(0), Object::Integer(595), Object::Integer(842)]));
+        page.set(
+            "MediaBox",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(595),
+                Object::Integer(842),
+            ]),
+        );
         page.set("Contents", Object::Reference(content_id));
         let page_id = document.add_object(Object::Dictionary(page));
         let mut pages = Dictionary::new();
@@ -973,17 +1023,32 @@ mod tests {
         let mut field_refs = Vec::new();
         for field in &fields {
             let mut dict = Dictionary::new();
-            dict.set("T", Object::String(field.name.as_bytes().to_vec(), StringFormat::Literal));
+            dict.set(
+                "T",
+                Object::String(field.name.as_bytes().to_vec(), StringFormat::Literal),
+            );
             dict.set("FT", Object::Name(b"Tx".to_vec()));
             if let Some(v) = field.value {
-                dict.set("V", Object::String(v.as_bytes().to_vec(), StringFormat::Literal));
+                dict.set(
+                    "V",
+                    Object::String(v.as_bytes().to_vec(), StringFormat::Literal),
+                );
             }
             if field.appearance {
+                // A viewer-written appearance: /N references a real
+                // appearance stream, as in the conformance `viewer-filled`
+                // vector.
+                let stream_id = document.add_object(Object::Stream(lopdf::Stream::new(
+                    Dictionary::new(),
+                    Vec::new(),
+                )));
                 let mut ap = Dictionary::new();
-                ap.set("N", Object::Null);
+                ap.set("N", Object::Reference(stream_id));
                 dict.set("AP", Object::Dictionary(ap));
             }
-            field_refs.push(Object::Reference(document.add_object(Object::Dictionary(dict))));
+            field_refs.push(Object::Reference(
+                document.add_object(Object::Dictionary(dict)),
+            ));
         }
         let mut catalog = Dictionary::new();
         catalog.set("Type", Object::Name(b"Catalog".to_vec()));
@@ -1004,7 +1069,10 @@ mod tests {
             let mut meta_dict = Dictionary::new();
             meta_dict.set("Type", Object::Name(b"Metadata".to_vec()));
             meta_dict.set("Subtype", Object::Name(b"XML".to_vec()));
-            let meta_id = document.add_object(Object::Stream(lopdf::Stream::new(meta_dict, xmp_str.into_bytes())));
+            let meta_id = document.add_object(Object::Stream(lopdf::Stream::new(
+                meta_dict,
+                xmp_str.into_bytes(),
+            )));
             if let Ok(Object::Dictionary(cat)) = document.get_object_mut(catalog_id) {
                 cat.set("Metadata", Object::Reference(meta_id));
             }
@@ -1022,7 +1090,11 @@ mod tests {
 
     #[test]
     fn blank_form_not_machine() {
-        let bytes = build_pdf(vec![TestField::blank("surname"), TestField::blank("given")], false, None);
+        let bytes = build_pdf(
+            vec![TestField::blank("surname"), TestField::blank("given")],
+            false,
+            None,
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::BlankForm);
         assert_eq!(r.filled_fields, 0);
@@ -1030,7 +1102,14 @@ mod tests {
 
     #[test]
     fn machine_suspected_without_marker() {
-        let bytes = build_pdf(vec![TestField::machine("surname", "Smith"), TestField::machine("given", "Ada")], true, None);
+        let bytes = build_pdf(
+            vec![
+                TestField::machine("surname", "Smith"),
+                TestField::machine("given", "Ada"),
+            ],
+            true,
+            None,
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::MachineFilledSuspected);
     }
@@ -1038,15 +1117,29 @@ mod tests {
     #[test]
     fn machine_filled_with_marker() {
         let xmp = r#"<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:ffp="https://hyperpolymath.dev/ns/form-fill-provenance/1.0/" ffp:filledBy="machine" ffp:tool="blocky-writer"/></rdf:RDF></x:xmpmeta>"#.to_string();
-        let bytes = build_pdf(vec![TestField::machine("surname", "Smith")], true, Some(xmp));
+        let bytes = build_pdf(
+            vec![TestField::machine("surname", "Smith")],
+            true,
+            Some(xmp),
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::MachineFilled);
-        assert_eq!(r.declared.as_ref().unwrap().tool.as_deref(), Some("blocky-writer"));
+        assert_eq!(
+            r.declared.as_ref().unwrap().tool.as_deref(),
+            Some("blocky-writer")
+        );
     }
 
     #[test]
     fn viewer_filled_is_unknown() {
-        let bytes = build_pdf(vec![TestField::human("surname", "Smith"), TestField::human("given", "Ada")], false, None);
+        let bytes = build_pdf(
+            vec![
+                TestField::human("surname", "Smith"),
+                TestField::human("given", "Ada"),
+            ],
+            false,
+            None,
+        );
         let r = classify_pdf(&bytes);
         assert_eq!(r.classification, FfpClassification::FilledUnknown);
         assert_eq!(r.appearances, FfpAppearances::Generated);

@@ -45,6 +45,11 @@ impl FfpClassification {
         }
     }
 
+    // Inherent `from_str` (token vocabulary pair to `as_str`), deliberately
+    // not `std::str::FromStr`: parsing never fails — unrecognised tokens
+    // surface as `Unreadable` rather than as an error, matching
+    // `FormProvenancePolicy::from_token`.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s {
             "no-form" => Self::NoForm,
@@ -146,12 +151,20 @@ pub struct FfpDeclared {
     pub tool_version: Option<String>,
     #[serde(rename = "filledAt", skip_serializing_if = "Option::is_none")]
     pub filled_at: Option<String>,
-    #[serde(rename = "appearancesGenerated", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "appearancesGenerated",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub appearances_generated: Option<bool>,
 }
 
 impl FfpDeclared {
-    pub fn machine(tool: Option<String>, tool_version: Option<String>, filled_at: Option<String>, appearances_generated: Option<bool>) -> Self {
+    pub fn machine(
+        tool: Option<String>,
+        tool_version: Option<String>,
+        filled_at: Option<String>,
+        appearances_generated: Option<bool>,
+    ) -> Self {
         Self {
             filled_by: "machine".to_string(),
             tool,
@@ -248,7 +261,9 @@ impl FfpRecord {
     pub fn should_hold(&self, policy: crate::types::FormProvenancePolicy) -> bool {
         use crate::types::FormProvenancePolicy;
         match policy {
-            FormProvenancePolicy::HoldForReview => self.is_machine_or_suspected() || self.has_blank_print_hazard(),
+            FormProvenancePolicy::HoldForReview => {
+                self.is_machine_or_suspected() || self.has_blank_print_hazard()
+            }
             _ => false,
         }
     }
@@ -269,12 +284,21 @@ impl FfpRecord {
                     "machine-filled form".to_string()
                 }
             }
-            FfpClassification::MachineFilledSuspected => "machine-filled form (suspected — incomplete appearances)".to_string(),
-            FfpClassification::FilledUnknown => "form values present — provenance unknown".to_string(),
+            FfpClassification::MachineFilledSuspected => {
+                "machine-filled form (suspected — incomplete appearances)".to_string()
+            }
+            FfpClassification::FilledUnknown => {
+                "form values present — provenance unknown".to_string()
+            }
             FfpClassification::Unreadable => "form provenance unreadable".to_string(),
         };
         if self.is_form() {
-            format!("{head}; {}/{} fields filled; appearances {}", self.filled_fields, self.total_fields, self.appearances.as_str())
+            format!(
+                "{head}; {}/{} fields filled; appearances {}",
+                self.filled_fields,
+                self.total_fields,
+                self.appearances.as_str()
+            )
         } else {
             head
         }
@@ -324,7 +348,9 @@ impl FfpRecord {
             FfpClassification::NoForm => "NotAForm",
             FfpClassification::BlankForm => "Empty",
             FfpClassification::FilledUnknown => "Human",
-            FfpClassification::MachineFilled | FfpClassification::MachineFilledSuspected => "Machine",
+            FfpClassification::MachineFilled | FfpClassification::MachineFilledSuspected => {
+                "Machine"
+            }
             FfpClassification::Unreadable => "Unknown",
         }
     }
@@ -388,7 +414,9 @@ impl std::fmt::Display for FormOrigin {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub enum ProvenanceConfidence {
     #[default]
     None,
@@ -492,19 +520,25 @@ impl From<FormProvenanceLegacy> for FfpRecord {
         } else {
             FfpAppearances::Generated
         };
-        let declared = legacy.marker.map(|m| FfpDeclared {
-            filled_by: m,
-            tool: legacy.producer,
-            tool_version: None,
-            filled_at: None,
-            appearances_generated: None,
-        }).or_else(|| legacy.producer.map(|p| FfpDeclared {
-            filled_by: "machine".to_string(),
-            tool: Some(p),
-            tool_version: None,
-            filled_at: None,
-            appearances_generated: None,
-        }));
+        let declared = if let Some(m) = &legacy.marker {
+            Some(FfpDeclared {
+                filled_by: m.clone(),
+                tool: legacy.producer.clone(),
+                tool_version: None,
+                filled_at: None,
+                appearances_generated: None,
+            })
+        } else if let Some(p) = &legacy.producer {
+            Some(FfpDeclared {
+                filled_by: "machine".to_string(),
+                tool: Some(p.clone()),
+                tool_version: None,
+                filled_at: None,
+                appearances_generated: None,
+            })
+        } else {
+            None
+        };
         let mut evidence = Vec::new();
         if legacy.need_appearances {
             evidence.push("FFP-E-NEED-APPEARANCES".to_string());
@@ -515,7 +549,9 @@ impl From<FormProvenanceLegacy> for FfpRecord {
         match legacy.origin {
             FormOrigin::NotAForm => evidence.push("FFP-E-NO-ACROFORM".to_string()),
             FormOrigin::Empty => evidence.push("FFP-E-NO-VALUES".to_string()),
-            FormOrigin::Unknown if !legacy.inspected => evidence.push("FFP-E-UNREADABLE".to_string()),
+            FormOrigin::Unknown if !legacy.inspected => {
+                evidence.push("FFP-E-UNREADABLE".to_string())
+            }
             _ => {}
         }
         if legacy.marker.is_some() {
@@ -572,7 +608,10 @@ mod tests {
             total_fields: 2,
             appearances: FfpAppearances::Incomplete,
             declared: None,
-            evidence: vec!["FFP-E-NEED-APPEARANCES".to_string(), "FFP-E-AP-INCOMPLETE".to_string()],
+            evidence: vec![
+                "FFP-E-NEED-APPEARANCES".to_string(),
+                "FFP-E-AP-INCOMPLETE".to_string(),
+            ],
         };
         assert_eq!(
             r.canonical_line(),
@@ -590,7 +629,13 @@ mod tests {
             filled_fields: 2,
             total_fields: 2,
             appearances: FfpAppearances::Incomplete,
-            declared: Some(FfpDeclared { filled_by: "machine".to_string(), tool: Some("blocky-writer".to_string()), tool_version: Some("0.2.0".to_string()), filled_at: None, appearances_generated: Some(false) }),
+            declared: Some(FfpDeclared {
+                filled_by: "machine".to_string(),
+                tool: Some("blocky-writer".to_string()),
+                tool_version: Some("0.2.0".to_string()),
+                filled_at: None,
+                appearances_generated: Some(false),
+            }),
             evidence: vec!["FFP-E-DECL-MACHINE".to_string()],
         };
         let json = r.audit_json();
@@ -601,7 +646,10 @@ mod tests {
     #[test]
     fn unreadable_line() {
         let r = FfpRecord::unreadable("parse failed");
-        assert_eq!(r.canonical_line(), "classification=unreadable form=unknown filled=0/0 appearances=unknown evidence=FFP-E-UNREADABLE");
+        assert_eq!(
+            r.canonical_line(),
+            "classification=unreadable form=unknown filled=0/0 appearances=unknown evidence=FFP-E-UNREADABLE"
+        );
     }
 
     #[test]
@@ -614,7 +662,13 @@ mod tests {
             filled_fields: 2,
             total_fields: 2,
             appearances: FfpAppearances::Incomplete,
-            declared: Some(FfpDeclared { filled_by: "machine".to_string(), tool: None, tool_version: None, filled_at: None, appearances_generated: None }),
+            declared: Some(FfpDeclared {
+                filled_by: "machine".to_string(),
+                tool: None,
+                tool_version: None,
+                filled_at: None,
+                appearances_generated: None,
+            }),
             evidence: vec!["FFP-E-DECL-MACHINE".to_string()],
         };
         assert!(r.should_hold(FormProvenancePolicy::HoldForReview));

@@ -1,27 +1,20 @@
-# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
-# This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
-# Rust CI — thin wrapper calling the shared estate reusable in
-# hyperpolymath/standards. Configure once, propagate everywhere.
-# See: docs/CI-REUSABLE-WORKFLOWS.adoc in standards.
-name: Rust CI
+# Auto-fix cargo fmt (temporary — remove after D189 lands)
+# Uses only actions already in actions.lock to avoid lock churn.
+
+name: fmt
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  actions: read
-  contents: read
+  contents: write
 
 jobs:
-  # Auto-format before the reusable Rust CI so PRs don't fail on fmt alone.
   fmt:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -43,6 +36,3 @@ jobs:
           else
             echo "no fmt changes"
           fi
-  rust-ci:
-    needs: fmt
-    uses: hyperpolymath/standards/.github/workflows/rust-ci-reusable.yml@84355587cb2a1f86e6882de83514a32db2646e7a # re-pinned 2026-07-01: toolchain-required-input fix (standards#439)

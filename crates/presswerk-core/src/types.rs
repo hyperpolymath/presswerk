@@ -240,8 +240,8 @@ pub struct PageRange {
 // ---------------------------------------------------------------------------
 
 pub use crate::provenance::{
-    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord,
-    FormOrigin, FormProvenance, ProvenanceConfidence,
+    FfpAppearances, FfpClassification, FfpDeclared, FfpForm, FfpRecord, FormOrigin, FormProvenance,
+    ProvenanceConfidence,
 };
 
 /// What the print path does with a machine-filled form (issue #118).
@@ -658,7 +658,10 @@ mod tests {
         let provenance = FormProvenance::default();
         // Default is unreadable (form unknown, not a form)
         assert!(!provenance.is_form());
-        assert_eq!(provenance.classification, crate::provenance::FfpClassification::Unreadable);
+        assert_eq!(
+            provenance.classification,
+            crate::provenance::FfpClassification::Unreadable
+        );
         assert_eq!(provenance.form, crate::provenance::FfpForm::Unknown);
         assert!(!provenance.is_machine_filled());
         assert_eq!(provenance.evidence, vec!["FFP-E-UNREADABLE".to_string()]);
@@ -672,8 +675,14 @@ mod tests {
             "test.pdf".to_string(),
             "hash".to_string(),
         );
-        assert_eq!(job.form_provenance.classification, crate::provenance::FfpClassification::Unreadable);
-        assert_eq!(job.form_provenance.form, crate::provenance::FfpForm::Unknown);
+        assert_eq!(
+            job.form_provenance.classification,
+            crate::provenance::FfpClassification::Unreadable
+        );
+        assert_eq!(
+            job.form_provenance.form,
+            crate::provenance::FfpForm::Unknown
+        );
     }
 
     #[test]
@@ -702,7 +711,10 @@ mod tests {
     #[test]
     fn test_form_provenance_declared_tool() {
         let mut provenance = machine_filled();
-        assert_eq!(provenance.declared.as_ref().and_then(|d| d.tool.as_deref()), Some("blocky-writer 0.4.2"));
+        assert_eq!(
+            provenance.declared.as_ref().and_then(|d| d.tool.as_deref()),
+            Some("blocky-writer 0.4.2")
+        );
 
         // Declared tool is preferred
         provenance.declared = Some(crate::provenance::FfpDeclared {
@@ -712,14 +724,20 @@ mod tests {
             filled_at: None,
             appearances_generated: None,
         });
-        assert_eq!(provenance.declared.as_ref().and_then(|d| d.tool.as_deref()), Some("other-tool"));
+        assert_eq!(
+            provenance.declared.as_ref().and_then(|d| d.tool.as_deref()),
+            Some("other-tool")
+        );
     }
 
     #[test]
     fn test_form_provenance_audit_json_roundtrips() {
         let provenance = machine_filled();
         let json = provenance.audit_json();
-        assert!(json.contains("\"classification\":\"machine-filled\""), "{json}");
+        assert!(
+            json.contains("\"classification\":\"machine-filled\""),
+            "{json}"
+        );
         assert!(json.contains("\"ffp\":\"1.0\""), "{json}");
 
         let restored: FormProvenance = serde_json::from_str(&json).expect("deserialize");
@@ -771,7 +789,10 @@ mod tests {
             total_fields: 2,
             appearances: crate::provenance::FfpAppearances::Incomplete,
             declared: None,
-            evidence: vec!["FFP-E-NEED-APPEARANCES".to_string(), "FFP-E-AP-INCOMPLETE".to_string()],
+            evidence: vec![
+                "FFP-E-NEED-APPEARANCES".to_string(),
+                "FFP-E-AP-INCOMPLETE".to_string(),
+            ],
         };
         assert!(suspected.should_hold(FormProvenancePolicy::HoldForReview));
     }
