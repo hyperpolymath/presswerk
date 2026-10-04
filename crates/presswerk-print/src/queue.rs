@@ -401,14 +401,11 @@ fn row_to_print_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
     let form_provenance: FfpRecord = form_provenance_json
         .as_deref()
         .and_then(|json| {
-            // Try new shape
+            // Try new shape. `'{}'` (the pre-FFP schema default) fails to
+            // parse here — `FfpRecord` requires its fields — and falls
+            // through to the legacy shape, then to the token mapping below,
+            // surfacing as "not inspected" rather than as a guess.
             if let Ok(rec) = serde_json::from_str::<FfpRecord>(json) {
-                // `ffp` must be "1.0" or missing defaults to 1.0; guard against empty `{}`
-                if rec.ffp == "1.0" || rec.ffp.is_empty() {
-                    // Empty `{}` parsed as default? Ensure classification is not default unreadable due to empty
-                    // If json was "{}", rec will be unreadable with UNREADABLE evidence — that's correct for legacy default.
-                    return Some(rec);
-                }
                 return Some(rec);
             }
             // Try legacy shape

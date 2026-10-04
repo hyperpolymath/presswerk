@@ -2399,8 +2399,15 @@ mod tests {
                 Object::String(b"Smith".to_vec(), StringFormat::Literal),
             );
         } else {
+            // A viewer-written appearance: /N references a real appearance
+            // stream, as in the conformance `viewer-filled` vector. With
+            // this, the hand-filled shape carries no blank-print hazard.
+            let stream_id = document.add_object(Object::Stream(lopdf::Stream::new(
+                Dictionary::new(),
+                Vec::new(),
+            )));
             let mut appearance = Dictionary::new();
-            appearance.set("N", Object::Null);
+            appearance.set("N", Object::Reference(stream_id));
             field.set("AP", Object::Dictionary(appearance));
         }
         let field_id = document.add_object(Object::Dictionary(field));

@@ -75,8 +75,10 @@ impl PdfReader {
     ///
     /// Note: this consults the parsed object tree only (AcroForm + XMP packet
     /// if still decodable). Prefer [`crate::pdf::form::classify_pdf`] /
-    /// [`crate::provenance::classify_pdf`] which scan the raw byte stream
-    /// before parsing and therefore see the uncompressed XMP and the original\n    /// `%PDF` header (issue #122, FFP/1 MARKER: XMP at Catalog /Metadata,\n    /// ffp:filledBy=machine). The print path always uses the raw-byte entry.
+    /// [`crate::provenance::classify_pdf`], which scan the raw byte stream
+    /// before parsing and therefore see the uncompressed XMP and the original
+    /// `%PDF` header (issue #122, FFP/1 MARKER: XMP at Catalog `/Metadata`,
+    /// `ffp:filledBy=machine`). The print path always uses the raw-byte entry.
     pub fn form_provenance(&self) -> FormProvenance {
         super::form::classify_document(&self.document, &[])
     }

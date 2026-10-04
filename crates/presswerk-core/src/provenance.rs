@@ -45,6 +45,11 @@ impl FfpClassification {
         }
     }
 
+    // Inherent `from_str` (token vocabulary pair to `as_str`), deliberately
+    // not `std::str::FromStr`: parsing never fails — unrecognised tokens
+    // surface as `Unreadable` rather than as an error, matching
+    // `FormProvenancePolicy::from_token`.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s {
             "no-form" => Self::NoForm,
