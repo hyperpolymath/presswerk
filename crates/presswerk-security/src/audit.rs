@@ -199,9 +199,14 @@ impl AuditLog {
 
     /// Return the total number of entries in the audit log.
     pub fn count(&self) -> Result<u64, PresswerkError> {
+        // SQLite integers are signed 64-bit; rusqlite has no `FromSql` impl
+        // for `u64`, so read as `i64` and widen (COUNT(*) is never negative).
         self.conn
-            .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .map_err(db_err)
+            .map(|n| n as u64)
     }
 }
 
