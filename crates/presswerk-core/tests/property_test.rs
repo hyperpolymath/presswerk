@@ -16,19 +16,21 @@ use proptest::prelude::*;
 proptest! {
     #[test]
     fn prop_config_port_in_valid_range(port in 1u16..=65535u16) {
-        let mut config = AppConfig::default();
-        config.server_port = port;
+        let config = AppConfig {
+            server_port: port,
+            ..Default::default()
+        };
         prop_assert!(config.server_port >= 1);
-        prop_assert!(config.server_port <= 65535);
     }
 
     #[test]
     fn prop_config_timeouts_positive(timeout_secs in 1u64..=3600u64) {
-        let mut config = AppConfig::default();
-        config.print_timeout_secs = timeout_secs;
-        config.query_timeout_secs = timeout_secs / 2;
+        let config = AppConfig {
+            print_timeout_secs: timeout_secs,
+            query_timeout_secs: timeout_secs / 2,
+            ..Default::default()
+        };
         prop_assert!(config.print_timeout_secs > 0);
-        prop_assert!(config.query_timeout_secs >= 0);
         prop_assert!(config.print_timeout_secs >= config.query_timeout_secs);
     }
 
@@ -127,8 +129,10 @@ proptest! {
 proptest! {
     #[test]
     fn prop_print_settings_copies_positive(copies in 1u32..=1000u32) {
-        let mut settings = PrintSettings::default();
-        settings.copies = copies;
+        let settings = PrintSettings {
+            copies,
+            ..Default::default()
+        };
         prop_assert!(settings.copies > 0);
     }
 
@@ -176,7 +180,7 @@ proptest! {
         };
 
         let enum_val = orientation.ipp_enum_value();
-        prop_assert!(enum_val >= 3 && enum_val <= 6);
+        prop_assert!((3..=6).contains(&enum_val));
     }
 }
 

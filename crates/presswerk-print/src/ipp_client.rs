@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::time::Duration;
 
+use ipp::parser::IppParseError;
 use ipp::prelude::*;
 use tracing::{debug, error, info, instrument};
 
@@ -74,7 +75,9 @@ impl IppClient {
     /// flat map of attribute names to their string representations.
     #[instrument(skip(self), fields(uri = %self.uri))]
     pub async fn get_printer_attributes(&self) -> Result<PrinterAttributes> {
-        let operation = IppOperationBuilder::get_printer_attributes(self.uri.clone()).build();
+        let operation = IppOperationBuilder::get_printer_attributes(self.uri.clone())
+            .build()
+            .map_err(ipp_parse_error)?;
         let client = AsyncIppClient::new(self.uri.clone());
 
         debug!("sending Get-Printer-Attributes");
@@ -129,46 +132,74 @@ impl IppClient {
             .document_format(document_type.mime_type());
 
         // Inject print settings as IPP job-template attributes.
-        builder = builder.attribute(IppAttribute::new(
-            "copies",
-            IppValue::Integer(settings.copies as i32),
-        ));
-        builder = builder.attribute(IppAttribute::new(
-            "media",
-            IppValue::Keyword(settings.paper_size.ipp_media_keyword().into()),
-        ));
-        builder = builder.attribute(IppAttribute::new(
-            "sides",
-            IppValue::Keyword(settings.duplex.ipp_sides_keyword().into()),
-        ));
-        builder = builder.attribute(IppAttribute::new(
-            "orientation-requested",
-            IppValue::Enum(settings.orientation.ipp_enum_value()),
-        ));
-        builder = builder.attribute(IppAttribute::new(
-            "print-color-mode",
-            IppValue::Keyword(
-                if settings.color {
-                    "color"
-                } else {
-                    "monochrome"
-                }
-                .into(),
-            ),
-        ));
+        builder = builder.attribute(
+            IppAttribute::with_name("copies", IppValue::Integer(settings.copies as i32))
+                .map_err(ipp_parse_error)?,
+        );
+        builder = builder.attribute(
+            IppAttribute::with_name(
+                "media",
+                IppValue::Keyword(
+                    settings
+                        .paper_size
+                        .ipp_media_keyword()
+                        .try_into()
+                        .map_err(ipp_parse_error)?,
+                ),
+            )
+            .map_err(ipp_parse_error)?,
+        );
+        builder = builder.attribute(
+            IppAttribute::with_name(
+                "sides",
+                IppValue::Keyword(
+                    settings
+                        .duplex
+                        .ipp_sides_keyword()
+                        .try_into()
+                        .map_err(ipp_parse_error)?,
+                ),
+            )
+            .map_err(ipp_parse_error)?,
+        );
+        builder = builder.attribute(
+            IppAttribute::with_name(
+                "orientation-requested",
+                IppValue::Enum(settings.orientation.ipp_enum_value()),
+            )
+            .map_err(ipp_parse_error)?,
+        );
+        builder = builder.attribute(
+            IppAttribute::with_name(
+                "print-color-mode",
+                IppValue::Keyword(
+                    if settings.color {
+                        "color"
+                    } else {
+                        "monochrome"
+                    }
+                    .try_into()
+                    .map_err(ipp_parse_error)?,
+                ),
+            )
+            .map_err(ipp_parse_error)?,
+        );
 
         // Page ranges (1-indexed, inclusive)
         if let Some(ref range) = settings.page_range {
-            builder = builder.attribute(IppAttribute::new(
-                "page-ranges",
-                IppValue::RangeOfInteger {
-                    min: range.start as i32,
-                    max: range.end as i32,
-                },
-            ));
+            builder = builder.attribute(
+                IppAttribute::with_name(
+                    "page-ranges",
+                    IppValue::RangeOfInteger {
+                        min: range.start as i32,
+                        max: range.end as i32,
+                    },
+                )
+                .map_err(ipp_parse_error)?,
+            );
         }
 
-        let operation = builder.build();
+        let operation = builder.build().map_err(ipp_parse_error)?;
         let client = AsyncIppClient::new(self.uri.clone());
 
         info!(
@@ -212,7 +243,9 @@ impl IppClient {
     /// Retrieve the list of jobs currently known to the printer.
     #[instrument(skip(self), fields(uri = %self.uri))]
     pub async fn get_jobs(&self) -> Result<Vec<RemoteJobInfo>> {
-        let operation = IppOperationBuilder::get_jobs(self.uri.clone()).build();
+        let operation = IppOperationBuilder::get_jobs(self.uri.clone())
+            .build()
+            .map_err(ipp_parse_error)?;
         let client = AsyncIppClient::new(self.uri.clone());
 
         debug!("sending Get-Jobs");
@@ -244,7 +277,9 @@ impl IppClient {
     /// Returns `Ok(())` if the printer accepted the cancellation.
     #[instrument(skip(self), fields(uri = %self.uri, job_id))]
     pub async fn cancel_job(&self, job_id: i32) -> Result<()> {
-        let operation = IppOperationBuilder::cancel_job(self.uri.clone(), job_id).build();
+        let operation = IppOperationBuilder::cancel_job(self.uri.clone(), job_id)
+            .build()
+            .map_err(ipp_parse_error)?;
         let client = AsyncIppClient::new(self.uri.clone());
 
         info!(job_id, "sending Cancel-Job");
@@ -278,6 +313,10 @@ impl IppClient {
 // Helper functions for parsing IPP responses
 // ---------------------------------------------------------------------------
 
+fn ipp_parse_error(error: IppParseError) -> PresswerkError {
+    PresswerkError::IppRequest(format!("invalid IPP operation: {error}"))
+}
+
 /// Flatten all attribute groups in an IPP response into a single map.
 ///
 /// Multi-valued attributes are joined with `", "`.  This intentionally
@@ -286,7 +325,7 @@ fn flatten_attributes(attrs: &IppAttributes) -> PrinterAttributes {
     let mut map = HashMap::new();
     for group in attrs.groups() {
         for (name, attr) in group.attributes() {
-            map.insert(name.clone(), format!("{}", attr.value()));
+            map.insert(name.to_string(), format!("{}", attr.value()));
         }
     }
     map
@@ -352,6 +391,22 @@ mod tests {
     fn new_rejects_invalid_uri() {
         let result = IppClient::new("not a valid uri %%%");
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn print_job_rejects_overlong_job_name() {
+        let client = IppClient::new("ipp://127.0.0.1:631/ipp/print").expect("valid URI");
+        let result = client
+            .print_job(
+                Vec::new(),
+                DocumentType::Pdf,
+                &"x".repeat(256),
+                &PrintSettings::default(),
+            )
+            .await;
+        assert!(
+            matches!(result, Err(PresswerkError::IppRequest(detail)) if detail.contains("invalid IPP operation"))
+        );
     }
 
     #[test]

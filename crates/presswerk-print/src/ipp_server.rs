@@ -1795,7 +1795,6 @@ mod tests {
         let Some(req) = result else {
             panic!("parse_http_envelope failed")
         };
-        let req = req;
         assert_eq!(req.content_length, Some(42));
         assert!(req.body_offset > 0);
         assert_eq!(&http[req.body_offset..], b"<ipp body here>");

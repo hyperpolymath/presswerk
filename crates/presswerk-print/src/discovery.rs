@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
 use tracing::{debug, info, warn};
 
 use presswerk_core::error::{PresswerkError, Result};
@@ -210,6 +210,7 @@ impl PrinterDiscovery {
                             debug!(service_type = %stype, "mDNS search stopped");
                             break;
                         }
+                        _ => {}
                     }
                 }
             })
@@ -217,7 +218,7 @@ impl PrinterDiscovery {
     }
 }
 
-/// Convert a resolved `ServiceInfo` into a `DiscoveredPrinter`.
+/// Convert a resolved `ResolvedService` into a `DiscoveredPrinter`.
 ///
 /// TXT record keys (case-insensitive) commonly found on IPP printers:
 ///   - `printer-make-and-model` — human-readable make/model string
@@ -225,7 +226,7 @@ impl PrinterDiscovery {
 ///   - `Color`                  — "T" or "F"
 ///   - `Duplex`                 — "T" or "F"
 ///   - `rp`                     — resource path (e.g. "ipp/print")
-fn service_info_to_printer(info: &ServiceInfo, tls: bool) -> Result<DiscoveredPrinter> {
+fn service_info_to_printer(info: &ResolvedService, tls: bool) -> Result<DiscoveredPrinter> {
     let name = info.get_fullname().to_owned();
     let port = info.get_port();
 
@@ -235,7 +236,7 @@ fn service_info_to_printer(info: &ServiceInfo, tls: bool) -> Result<DiscoveredPr
         .iter()
         .find(|a| a.is_ipv4())
         .or_else(|| info.get_addresses().iter().next())
-        .copied()
+        .map(|address| address.to_ip_addr())
         .ok_or_else(|| PresswerkError::Discovery(format!("no address for service {name}")))?;
 
     // Build the IPP URI from TXT `rp` key or fall back to "ipp/print".
@@ -273,7 +274,7 @@ fn service_info_to_printer(info: &ServiceInfo, tls: bool) -> Result<DiscoveredPr
 }
 
 /// Read a boolean TXT record value.  IPP Everywhere uses "T"/"F".
-fn txt_bool(info: &ServiceInfo, key: &str) -> bool {
+fn txt_bool(info: &ResolvedService, key: &str) -> bool {
     info.get_property_val_str(key)
         .map(|v| v.eq_ignore_ascii_case("t") || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
