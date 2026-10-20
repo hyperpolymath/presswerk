@@ -40,7 +40,7 @@ ipp = { version = "6", features = ["async"] }
 mdns-sd = "0.19"
 
 # Document processing
-lopdf = "0.40"
+lopdf = "0.42"
 printpdf = "0.9"
 image = "0.25"
 imageproc = "0.26"
