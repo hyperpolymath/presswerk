@@ -31,6 +31,7 @@ fn e2e_config_with_custom_settings() {
         print_timeout_secs: 120,
         query_timeout_secs: 30,
         easy_mode: false,
+        ..Default::default()
     };
 
     assert_eq!(config.default_paper_size, PaperSize::Letter);
@@ -112,7 +113,7 @@ fn e2e_document_type_detection() {
     ];
 
     for (filename, expected) in types {
-        let ext = filename.split('.').last().unwrap_or("");
+        let ext = filename.split('.').next_back().unwrap_or("");
         let detected = DocumentType::from_extension(ext);
         assert_eq!(
             detected, expected,
