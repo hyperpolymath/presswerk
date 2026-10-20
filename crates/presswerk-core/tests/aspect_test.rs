@@ -124,14 +124,14 @@ fn aspect_invalid_dpi_detection() {
 
     for dpi in valid_dpis {
         assert!(
-            dpi >= MIN_DPI && dpi <= MAX_DPI,
+            (MIN_DPI..=MAX_DPI).contains(&dpi),
             "DPI {} should be valid",
             dpi
         );
     }
 
     for dpi in invalid_dpis {
-        let is_invalid = dpi < MIN_DPI || dpi > MAX_DPI;
+        let is_invalid = !(MIN_DPI..=MAX_DPI).contains(&dpi);
         assert!(is_invalid, "DPI {} should be detected as invalid", dpi);
     }
 }
@@ -295,10 +295,12 @@ fn aspect_bytes_progress_invariant() {
 
 #[test]
 fn aspect_encryption_setting_consistency() {
-    let mut config = AppConfig::default();
+    let mut config = AppConfig {
+        encryption_enabled: false,
+        ..Default::default()
+    };
 
     // If encryption is disabled, audit should still be optional
-    config.encryption_enabled = false;
     assert!(!config.encryption_enabled);
     // audit can be true or false independently
 
@@ -334,10 +336,11 @@ fn aspect_tls_requirement_with_network_jobs() {
 
 #[test]
 fn aspect_auto_accept_policy_consistency() {
-    let mut config = AppConfig::default();
-
-    // auto_accept_network_jobs decision affects workflow
-    config.auto_accept_network_jobs = false;
+    let config = AppConfig {
+        auto_accept_network_jobs: false,
+        ..Default::default()
+    };
+    assert!(!config.auto_accept_network_jobs);
     // When false, jobs should be held for review
     let job = PrintJob::new(
         JobSource::Network {

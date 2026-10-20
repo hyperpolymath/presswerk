@@ -4,7 +4,9 @@
 // Benchmarks for presswerk-core critical operations.
 // Run with: cargo bench -p presswerk-core
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use criterion::{Criterion, criterion_group, criterion_main};
 use presswerk_core::{AppConfig, DocumentType, JobSource, PrintJob, PrintSettings};
 
 fn bench_config_creation(c: &mut Criterion) {
@@ -39,7 +41,7 @@ fn bench_config_serialization(c: &mut Criterion) {
 
     c.bench_function("config_deserialize_json", |b| {
         b.iter(|| {
-            let _config: AppConfig = serde_json::from_str(&black_box(&json)).expect("deserialize");
+            let _config: AppConfig = serde_json::from_str(black_box(&json)).expect("deserialize");
         })
     });
 }
@@ -98,7 +100,7 @@ fn bench_job_serialization(c: &mut Criterion) {
 
     c.bench_function("job_deserialize_json", |b| {
         b.iter(|| {
-            let _job: PrintJob = serde_json::from_str(&black_box(&json)).expect("deserialize");
+            let _job: PrintJob = serde_json::from_str(black_box(&json)).expect("deserialize");
         })
     });
 }
@@ -112,10 +114,12 @@ fn bench_print_settings(c: &mut Criterion) {
 
     c.bench_function("settings_custom", |b| {
         b.iter(|| {
-            let mut _settings = PrintSettings::default();
-            _settings.copies = black_box(5);
-            _settings.color = black_box(false);
-            _settings.scale_to_fit = black_box(false);
+            let _settings = PrintSettings {
+                copies: black_box(5),
+                color: black_box(false),
+                scale_to_fit: black_box(false),
+                ..Default::default()
+            };
         })
     });
 
@@ -132,7 +136,7 @@ fn bench_print_settings(c: &mut Criterion) {
     c.bench_function("settings_deserialize_json", |b| {
         b.iter(|| {
             let _settings: PrintSettings =
-                serde_json::from_str(&black_box(&json)).expect("deserialize");
+                serde_json::from_str(black_box(&json)).expect("deserialize");
         })
     });
 }
@@ -183,7 +187,7 @@ fn bench_job_id_operations(c: &mut Criterion) {
 
     c.bench_function("job_id_clone", |b| {
         b.iter(|| {
-            let _id = black_box(&id).clone();
+            let _id = *black_box(&id);
         })
     });
 }

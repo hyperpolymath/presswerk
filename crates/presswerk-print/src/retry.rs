@@ -55,6 +55,7 @@ pub fn classify_error(err: &PresswerkError) -> ErrorClass {
 
         // User action needed
         PresswerkError::NoPrinterSelected => ErrorClass::UserAction,
+        PresswerkError::InvalidState(_) => ErrorClass::UserAction,
 
         // Permanent — wrong format, bad data, platform missing
         PresswerkError::UnsupportedDocument(_) => ErrorClass::Permanent,
@@ -219,6 +220,15 @@ mod tests {
         assert!(matches!(
             should_retry(&err, 0, &config),
             RetryDecision::GiveUp(ErrorClass::Permanent)
+        ));
+    }
+
+    #[test]
+    fn invalid_state_requires_user_action() {
+        let err = PresswerkError::InvalidState("server already running".into());
+        assert!(matches!(
+            should_retry(&err, 0, &RetryConfig::default()),
+            RetryDecision::GiveUp(ErrorClass::UserAction)
         ));
     }
 

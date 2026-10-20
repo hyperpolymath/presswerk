@@ -289,8 +289,10 @@ mod tests {
         attrs.insert("sides-supported".into(), "one-sided".into());
         let caps = PrinterCapabilities::from_attributes(&attrs);
 
-        let mut settings = PrintSettings::default();
-        settings.duplex = DuplexMode::LongEdge;
+        let settings = PrintSettings {
+            duplex: DuplexMode::LongEdge,
+            ..Default::default()
+        };
 
         let (corrected, result) = auto_correct_settings(&settings, &caps);
         assert!(!result.valid);
@@ -318,8 +320,10 @@ mod tests {
         attrs.insert("copies-supported".into(), "1-10".into());
         let caps = PrinterCapabilities::from_attributes(&attrs);
 
-        let mut settings = PrintSettings::default();
-        settings.copies = 50;
+        let settings = PrintSettings {
+            copies: 50,
+            ..Default::default()
+        };
 
         let (corrected, result) = auto_correct_settings(&settings, &caps);
         assert_eq!(corrected.copies, 10);
@@ -329,9 +333,11 @@ mod tests {
     #[test]
     fn unknown_caps_allows_everything() {
         let caps = PrinterCapabilities::from_attributes(&HashMap::new());
-        let mut settings = PrintSettings::default();
-        settings.duplex = DuplexMode::ShortEdge;
-        settings.copies = 99;
+        let settings = PrintSettings {
+            duplex: DuplexMode::ShortEdge,
+            copies: 99,
+            ..Default::default()
+        };
 
         let (_, result) = auto_correct_settings(&settings, &caps);
         // No corrections when capabilities are unknown

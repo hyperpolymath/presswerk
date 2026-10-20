@@ -4,7 +4,9 @@
 // Criterion benchmarks for IPP request parsing, response building, and
 // document content hashing in the presswerk-print crate.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use criterion::{Criterion, criterion_group, criterion_main};
 use sha2::{Digest, Sha256};
 
 use presswerk_print::ipp_server::{
