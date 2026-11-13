@@ -30,7 +30,7 @@ jobs:
           # `toolchain` input: a channel or version, e.g. stable / 1.85.0.
           toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.3
 
       - name: Install system dependencies
         run: |
