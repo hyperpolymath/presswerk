@@ -24,7 +24,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.3
       - run: cargo fmt --all
       - run: |
           git config user.name "github-actions"
